@@ -30,7 +30,10 @@ import asyncLocalStore from '../../src/providers/asyncLocalStore.js';
 import containerMiddleware from '../../src/providers/middleware/container.js';
 import containerXffMiddleware from '../../src/providers/middleware/container/xff.js';
 import SelectClientRegistrationParams from "../../src/services/eventsCollection/selectors/selectClientRegistrationParams.js";
-@registry([asyncLocalStore, logger, loggerMiddleware, loggerGlobal, config, keyvBlocklist, swaggerMiddleware, helmetMiddleware, bodyparserMiddleware, corsMiddleware, roleMiddlware, jwtMiddlewareConfig, jwtMiddlewareConfigKeys, jwtMiddlewarePassthrough, jwtMiddleware, compressMiddleware, sslifyMiddleware, xssMiddleware, pinoMiddleware, oauthGoogle, keyvSignupcodes, db, nats, containerMiddleware, containerXffMiddleware, {
+import throttlerRepliers from "../../src/providers/throttler/repliers.js";
+import throttlerRepliersWarmup from "../../src/providers/throttler/repliersWarmup.js";
+import thorottlerRepliersOnDelay from "../mocks/providers/throttler/ondelay.js";
+@registry([asyncLocalStore, logger, loggerMiddleware, loggerGlobal, config, keyvBlocklist, swaggerMiddleware, helmetMiddleware, bodyparserMiddleware, corsMiddleware, roleMiddlware, jwtMiddlewareConfig, jwtMiddlewareConfigKeys, jwtMiddlewarePassthrough, jwtMiddleware, compressMiddleware, sslifyMiddleware, xssMiddleware, pinoMiddleware, oauthGoogle, keyvSignupcodes, db, nats, containerMiddleware, containerXffMiddleware, thorottlerRepliersOnDelay, throttlerRepliers, throttlerRepliersWarmup, {
    token: 'data.communities',
    useValue: dataCommunities
 }, {

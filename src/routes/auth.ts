@@ -3,9 +3,10 @@ import { container } from "tsyringe";
 import type { Middleware } from "koa-jwt";
 import AuthService from "../services/auth.js";
 import { ApiError } from "../lib/errors.js";
-import { authEmbedSchema, authRepliersTokenSchema, userLoginSchema, userOtpSchema, userSignupSchema } from "../validate/auth.js";
+import { authEmbedSchema, authRepliersTokenSchema, providerCallbackSchema, providerUrlSchema, userLoginSchema, userOtpSchema, userSignupSchema } from "../validate/auth.js";
 import OAuthService from "../services/oauth.js";
 import { oauthUrlSchema } from "../validate/oauth.js";
+import { getBody } from "../lib/utils.js";
 const authMiddleware = container.resolve<Middleware>("middleware.jwt");
 const router = new Router({
    prefix: "/auth"
@@ -56,7 +57,15 @@ router.param("provider", (provider, ctx, next) => {
  */
 router.get("/:provider/url", async ctx => {
    const oAuthService = ctx.state.container.resolve(OAuthService);
-   const url = await oAuthService.url(ctx["provider"]);
+   const {
+      error,
+      value
+   } = providerUrlSchema.validate(ctx.request.query);
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const url = await oAuthService.url(ctx["provider"], value.redirect_uri);
    ctx.body = {
       url
    };
@@ -114,11 +123,31 @@ router.get("/:provider/url", async ctx => {
  *
  */
 router.post("/:provider/cb", async ctx => {
+   ctx.state["enable.xff"] = true;
+   const {
+      error: bodyError,
+      value: body
+   } = providerCallbackSchema.validate(ctx.request.body);
+   if (bodyError) {
+      ctx.throw(new ApiError(bodyError.message, 400));
+      return;
+   }
+   const {
+      error: queryError,
+      value: query
+   } = providerUrlSchema.validate(ctx.request.query);
+   if (queryError) {
+      ctx.throw(new ApiError(queryError.message, 400));
+      return;
+   }
    const oAuthService = ctx.state.container.resolve(OAuthService);
    const {
       token,
       profile
-   } = await oAuthService.callback(ctx["provider"], ctx.req);
+   } = await oAuthService.callback(ctx["provider"], {
+      code: body.code,
+      uri: body.redirect_uri ?? query.redirect_uri
+   });
    ctx.body = {
       token,
       profile
@@ -262,6 +291,7 @@ router.post("/otp", async ctx => {
  *             $ref: '#/components/responses/Unauthorized'
  */
 router.post("/refresh", authMiddleware, async ctx => {
+   ctx.state["enable.xff"] = true;
    const authService = ctx.state.container.resolve(AuthService);
    const {
       token
@@ -293,6 +323,7 @@ router.post("/refresh", authMiddleware, async ctx => {
  *             $ref: '#/components/responses/Unauthorized'
  */
 router.post("/logout", authMiddleware, async ctx => {
+   ctx.state["enable.xff"] = true;
    const authService = ctx.state.container.resolve(AuthService);
    await authService.logout(ctx.state["user"].jti, ctx.state["user"].exp);
    ctx.body = {
@@ -342,7 +373,7 @@ router.post("/signup", async ctx => {
       error,
       value
    } = userSignupSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       referer: ctx.request.headers["referer"]
    });
    if (error) {

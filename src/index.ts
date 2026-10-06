@@ -8,6 +8,13 @@ import config from "./config.js";
 import BossWebhooksService from "./services/boss/webhook.js";
 const logger = container.resolve<Logger>("logger.global");
 
+// Observe only: Node still prints the stack to stderr (Heroku) and exits 1.
+// Also fires for unhandled rejections (origin "unhandledRejection").
+process.on("uncaughtExceptionMonitor", (err, origin) => logger.fatal({
+   err,
+   origin
+}, "Fatal"));
+
 // setup nats connection on start, testing resolving on actual use
 // import { JetStreamClient } from "@nats-io/jetstream";
 // await container.resolve<Promise<JetStreamClient>>("nats");

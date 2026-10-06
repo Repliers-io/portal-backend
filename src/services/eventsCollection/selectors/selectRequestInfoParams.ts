@@ -1,8 +1,9 @@
 import { injectable } from "tsyringe";
 import _debug from "debug";
-import { contactRequestInfoSchema } from "../../../validate/contact.js";
-import { maybeClientId } from "../../../lib/utils.js";
-import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { requestInfoSchema } from "../../../validate/contact.js";
+import { getBody, maybeClientId } from "../../../lib/utils.js";
+import BaseEventCollectionSelector, { contactEntries, EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectRequestInfoParams");
 @injectable()
 export default class SelectRequestInfoParams extends BaseEventCollectionSelector {
@@ -10,31 +11,29 @@ export default class SelectRequestInfoParams extends BaseEventCollectionSelector
       const {
          error,
          value
-      } = contactRequestInfoSchema.validate({
-         ...ctx.request.body,
+      } = requestInfoSchema.validate({
+         ...getBody(ctx.request.body),
          clientId: maybeClientId(ctx.state?.["user"]?.sub)
       });
       if (error) {
-         debug("[selectSselectRequestInfoParams] error %O", error);
+         debug("[selectSelectRequestInfoParams] error %O", error);
          return null;
       }
       const defaults = await this.getDefaults(ctx);
-      return {
+      const property = await this.getProperty(value.mlsNumber);
+      const inquiryTags = this.config.eventsCollection.formTags?.inquiry;
+      const inquiryTag = property.forRent ? inquiryTags?.rent : inquiryTags?.sale;
+      const payload = {
          ...defaults,
          person: {
             firstName: value.name,
-            emails: [{
-               value: value.email,
-               type: 'main'
-            }],
-            phones: [{
-               value: value.phone,
-               type: 'main'
-            }]
+            ...contactEntries(value.email, value.phone),
+            tags: inquiryTag ? [inquiryTag] : undefined
          },
          message: value.message,
-         property: await this.getProperty(value.mlsNumber),
+         property,
          type: 'Inquiry'
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
 }

@@ -168,7 +168,6 @@ export interface BossUsersGetResponse extends BossCollectionResponse<"users"> {
 }
 export type CustomBossField = `custom${string}`;
 export type CustomPeopleFields = {
-   customPolsinelloAVM?: string | undefined;
    customAuthType?: string | undefined;
 } & Record<CustomBossField, string | undefined>;
 export type BossPeopleSingle = {
@@ -355,14 +354,14 @@ export default class BossService {
    public async peopleUpdate(id: string, params: Partial<BossPeopleSingle>) {
       return this.request("PUT", `/people/${id}`, params);
    }
-   public static getPrimaryEmail(emails: BossPeopleSingle["emails"]) {
-      return emails.find(email => email.status === "Valid" && email.isPrimary === 1);
+   public static getPrimaryEmail(emails: BossPeopleSingle["emails"] | null | undefined) {
+      return emails?.find(email => email.status === "Valid" && email.isPrimary === 1);
    }
-   public static getPrimaryPhone(phones: BossPeopleSingle["phones"]) {
-      return phones.find(phone => phone.status === "Valid" && phone.isPrimary === 1);
+   public static getPrimaryPhone(phones: BossPeopleSingle["phones"] | null | undefined) {
+      return phones?.find(phone => phone.status === "Valid" && phone.isPrimary === 1);
    }
    public static checkTags(person: BossPeopleSingle, config_tags: string) {
-      const commonTags = person.tags.filter(value => config_tags.split(',').includes(value));
+      const commonTags = (person.tags ?? []).filter(value => config_tags.split(',').includes(value));
       return commonTags.length > 0;
    }
 }

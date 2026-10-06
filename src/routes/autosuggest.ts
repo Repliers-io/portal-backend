@@ -1,15 +1,18 @@
 import Router from "@koa/router";
 import { container } from "tsyringe";
 import { ApiError } from "../lib/errors.js";
+import { sendCached } from "../lib/decorators/cached.js";
 import AutosuggestService from "../services/autosuggest.js";
 import { autosuggestAddressSchema, autosuggestSchema } from "../validate/autosuggest.js";
 import ListingsService from "../services/listings.js";
 import { RplClass } from "../types/repliers.js";
-import { RplListingsLocationsDto } from "validate/listings.js";
+import { RplListingsLocationsDto } from "../validate/listings.js";
 import { type AppConfig } from "../config.js";
+import { Middleware } from "koa-jwt";
 const router = new Router({
    prefix: "/autosuggest"
 });
+const authMiddleware = container.resolve<Middleware>("middleware.jwt.passthrough");
 const config = container.resolve<AppConfig>("config");
 
 /**
@@ -52,6 +55,14 @@ const config = container.resolve<AppConfig>("config");
 *          schema:
 *             type: string
 *             format: uuid
+*        - in: query
+*          name: type
+*          description: >-
+*             Filters the `listings` block by transaction type (sale/lease).
+*             Does not affect the `mapbox` or `locations` blocks. If omitted,
+*             falls back to the configured autosuggest listing type.
+*          schema:
+*             $ref: '#/components/schemas/RplType'
 
 *     responses:
 *        200:
@@ -179,12 +190,18 @@ const config = container.resolve<AppConfig>("config");
 *        400:
 *           $ref: '#/components/responses/BadRequest'
 */
-router.get("/", async ctx => {
+router.get("/", authMiddleware, async ctx => {
    ctx.state['enable.xff'] = true;
+   const payload = {
+      ...ctx.request.query,
+      app_state: {
+         user: ctx.state["user"]
+      }
+   };
    const {
       error,
       value
-   } = autosuggestSchema.validate(ctx.request.query);
+   } = autosuggestSchema.validate(payload);
    if (error) {
       ctx.throw(new ApiError(error.message, 400));
       return;
@@ -200,6 +217,7 @@ router.get("/", async ctx => {
 *     tags:
 *        - Autosuggest
 *     summary: Autosuggest locations
+*     deprecated: true
 *     responses:
 *        200:
 *           decription: list of suggestions
@@ -279,6 +297,9 @@ router.get("/", async ctx => {
 *        400:
 *           $ref: '#/components/responses/BadRequest'
 */
+/**
+ * @deprecated This method is deprecated in favor of the GET /locations.
+ */
 router.get("/locations", async ctx => {
    ctx.state['enable.xff'] = true;
    const listingsService = ctx.state.container.resolve(ListingsService);
@@ -288,11 +309,8 @@ router.get("/locations", async ctx => {
       dropCoordinates: config.settings.locations.drop_coordinates,
       activeCountLimit: config.settings.locations.active_count_limit
    };
-   const result = await listingsService.locations(params);
-   if ("expires" in result) {
-      ctx.set("Cache-Control", `private, max-age = ${result.expires}`);
-      ctx.body = result.result;
-   }
+   const data = await listingsService.locations(params);
+   sendCached(ctx, data);
 });
 
 /**
@@ -351,6 +369,7 @@ router.get("/locations", async ctx => {
  *             $ref: '#/components/responses/BadRequest'
  */
 router.get('/address', async ctx => {
+   ctx.state['enable.xff'] = true;
    const {
       error,
       value

@@ -1,6 +1,6 @@
 import joi from "joi";
 import { RepliersSearchesFilterDto, RplSearchesCreateDto, RplSearchesUpdateDto } from "../services/repliers/searches.js";
-import { rplClassSchema, rplTypeSingleSchema } from "./common.js";
+import { rplClassSchema, rplMapFlexibleSchema, rplTypeSingleSchema } from "./common.js";
 
 /**
  * @openapi
@@ -113,6 +113,34 @@ import { rplClassSchema, rplTypeSingleSchema } from "./common.js";
  *                type: array
  *                items:
  *                   type: string
+ *             minYearBuilt:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             maxYearBuilt:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             minSqft:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             maxSqft:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             minLotSizeSqft:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             maxLotSizeSqft:
+ *                type: number
+ *                format: int32
+ *                minimum: 0
+ *             keywords:
+ *                type: array
+ *                items:
+ *                   type: string
  *          required: [minPrice, maxPrice, type, class]
  */
 export const searchesCreateSchema = joi.object<RplSearchesCreateDto>().keys({
@@ -121,10 +149,14 @@ export const searchesCreateSchema = joi.object<RplSearchesCreateDto>().keys({
    streetNumbers: joi.array().items(joi.string()),
    streetNames: joi.array().items(joi.string()),
    minBeds: joi.number().integer().positive(),
+   minBedrooms: joi.number().integer().positive(),
    maxBeds: joi.number().integer().positive(),
+   maxBedrooms: joi.number().integer().positive(),
    maxMaintenanceFee: joi.number().integer().positive(),
    minBaths: joi.number().integer().positive(),
+   minBathrooms: joi.number().integer().positive(),
    maxBaths: joi.number().integer().positive(),
+   maxBathrooms: joi.number().integer().positive(),
    areas: joi.array().items(joi.string()),
    cities: joi.array().items(joi.string()),
    neighborhoods: joi.array().items(joi.string()),
@@ -133,7 +165,7 @@ export const searchesCreateSchema = joi.object<RplSearchesCreateDto>().keys({
    minPrice: joi.number().integer().positive().required(),
    propertyTypes: joi.array().items(joi.string()),
    styles: joi.array().items(joi.string()),
-   map: joi.alternatives(joi.array().items(joi.array().items(joi.array().length(2).items(joi.number()))), joi.string()),
+   map: rplMapFlexibleSchema,
    status: joi.boolean(),
    type: rplTypeSingleSchema.required(),
    class: rplClassSchema.required(),
@@ -146,7 +178,16 @@ export const searchesCreateSchema = joi.object<RplSearchesCreateDto>().keys({
    sewer: joi.array().items(joi.string()),
    heating: joi.array().items(joi.string()),
    swimmingPool: joi.array().items(joi.string()),
-   waterSource: joi.array().items(joi.string())
+   waterSource: joi.array().items(joi.string()),
+   minYearBuilt: joi.number().integer().positive(),
+   maxYearBuilt: joi.number().integer().positive(),
+   minSqft: joi.number().integer().positive(),
+   maxSqft: joi.number().integer().positive(),
+   minLotSizeSqft: joi.number().integer().positive(),
+   maxLotSizeSqft: joi.number().integer().positive(),
+   minLotWidth: joi.number().positive(),
+   maxLotWidth: joi.number().positive(),
+   keywords: joi.array().items(joi.string())
 });
 export const searchesUpdateSchema = searchesCreateSchema.append<RplSearchesCreateDto, RplSearchesUpdateDto>({
    searchId: joi.number().integer().positive().required()

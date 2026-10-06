@@ -1,8 +1,10 @@
-import Router, { Middleware } from "@koa/router";
+import Router from "@koa/router";
 import { container } from "tsyringe";
 import { ApiError } from "../lib/errors.js";
+import { sendCached } from "../lib/decorators/cached.js";
 import StatsService from "../services/stats.js";
 import { statsCommunitiesSchema, statsWidgetsSchema } from "../validate/stats.js";
+import { Middleware } from "koa";
 const router = new Router({
    prefix: "/stats"
 });
@@ -82,13 +84,8 @@ router.get("/widgets", authMiddlewarePassthrough, async ctx => {
       return;
    }
    const statsService = ctx.state.container.resolve(StatsService);
-   const result = await statsService.widgets(value);
-   if ("expires" in result) {
-      ctx.set("Cache-Control", `private, max-age = ${result.expires}`);
-      ctx.body = result.result;
-   } else {
-      ctx.body = result;
-   }
+   const data = await statsService.widgets(value);
+   sendCached(ctx, data);
 });
 /**
  * @openapi

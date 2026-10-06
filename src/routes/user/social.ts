@@ -1,8 +1,9 @@
-import Router, { Middleware } from "@koa/router";
+import Router from "@koa/router";
 import { container } from "tsyringe";
 import { ApiError } from "../../lib/errors.js";
 import SocialService from "../../services/user/social.js";
 import { userSocialCallbackSchema, userSocialGetTokensSchema, userSocialRefreshSchema, userSocialUnlinkSchema, userSocialUrlSchema } from "../../validate/user/social.js";
+import { Middleware } from "koa";
 const authMiddleware = container.resolve<Middleware>("middleware.jwt");
 const socialService = container.resolve(SocialService);
 const router = new Router({
@@ -97,14 +98,15 @@ router.get("/:provider/cb", authMiddleware, async ctx => {
       value
    } = userSocialCallbackSchema.validate({
       email: ctx.state["user"].email,
-      provider: ctx.params["provider"]
+      provider: ctx.params["provider"],
+      code: ctx.query["code"]
    });
    if (error) {
       ctx.throw(new ApiError(error.message, 400));
       return;
    }
    // We rely on the social provider (openid-client) to validate ctx.req
-   const result = await socialService.callback(ctx.req, value);
+   const result = await socialService.callback(value);
    ctx.body = result;
 });
 
@@ -153,6 +155,21 @@ router.get("/:provider/refresh", authMiddleware, async ctx => {
    const result = await socialService.refresh(value);
    ctx.body = result;
 });
+router.get("/{:provider}", authMiddleware, async ctx => {
+   const {
+      error,
+      value
+   } = userSocialGetTokensSchema.validate({
+      provider: ctx.params["provider"],
+      email: ctx.state["user"].email
+   });
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const result = await socialService.getTokens(value);
+   ctx.body = result;
+});
 
 /**
 * @openapi
@@ -184,21 +201,6 @@ router.get("/:provider/refresh", authMiddleware, async ctx => {
 *       401:
 *          $ref: '#/components/responses/Unauthorized'
 */
-router.get("/:provider*", authMiddleware, async ctx => {
-   const {
-      error,
-      value
-   } = userSocialGetTokensSchema.validate({
-      provider: ctx.params["provider"],
-      email: ctx.state["user"].email
-   });
-   if (error) {
-      ctx.throw(new ApiError(error.message, 400));
-      return;
-   }
-   const result = await socialService.getTokens(value);
-   ctx.body = result;
-});
 router.delete("/:provider", authMiddleware, async ctx => {
    const {
       error,

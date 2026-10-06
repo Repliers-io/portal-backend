@@ -1,7 +1,7 @@
 import { injectable, inject } from "tsyringe";
 import _debug from "debug";
 import BossService, { BossEventsCreateRequest, BossNoteCreateRequest } from "../boss.js";
-import type { AppConfig } from "config.js";
+import type { AppConfig } from "../../config.js";
 import { Context } from "koa";
 import UserService from "../../services/user.js";
 const debug = _debug("repliers:services:eventsCollection");
@@ -49,48 +49,60 @@ export default class EventsCollectionService {
          }).then(r => {
             debug("[noteCreate] succeed %O", r);
          }).catch(e => {
-            debug("[noteCreate] error %O", e);
+            debug("[noteCreate] boss.noteCreate: error %O", e);
          });
+      }).catch(e => {
+         debug("[noteCreate] getPersonId: error %O", e);
       });
    }
-   private getPersonId(params: {
+   private async getPersonId(params: {
       personId?: string | number | undefined;
       clientId?: number | string | undefined;
    }): Promise<number> {
-      return new Promise((resolve, reject) => {
-         if (params.personId) {
-            resolve(+params.personId);
-         }
-         if (params.clientId) {
-            this.userService.info(+params.clientId).then(async client => {
-               if (client.externalId) {
-                  resolve(+client.externalId);
-               } else {
-                  const personSearchParams = client?.externalId ? {
-                     id: client.externalId
-                  } : {
-                     email: client?.email
-                  };
-                  const bossPersons = await this.boss.getPeople(personSearchParams);
-                  if (bossPersons?.people?.[0]?.id) {
-                     resolve(bossPersons.people[0].id);
-                  } else {
-                     reject(new Error(`Person not found for clientId: ${params.clientId}`));
-                  }
-               }
-            });
-         } else {
-            reject(new Error("personId or clientId is required"));
-         }
+      if (params.personId) return +params.personId;
+      if (!params.clientId) throw new Error("personId or clientId is required");
+      const client = await this.userService.info(+params.clientId);
+      if (client.externalId) return +client.externalId;
+      // axios drops undefined params: getPeople({ email: undefined }) would match everyone.
+      if (!client.email) throw new Error(`Person not found for clientId: ${params.clientId}`);
+      const bossPersons = await this.boss.getPeople({
+         email: client.email
       });
+      const id = bossPersons?.people?.[0]?.id;
+      if (!id) throw new Error(`Person not found for clientId: ${params.clientId}`);
+      return id;
    }
    assignAgent(person: BossEventsCreateRequest["person"]) {
-      const defaultPersonFields = this.config.eventsCollection.defaultPersonFields;
-      return person?.assignedUserId ? {
-         assignedUserId: person.assignedUserId
-      } : {
-         assignedTo: person?.assignedTo || defaultPersonFields.assignedTo
-      };
+      /**
+       * NOTICE: this fix now prevents leads flipping from their agent
+       * which is unknown to this system to default agent
+       *
+       * specificalluy commenting of this line
+       * assignedTo: person?.assignedTo || defaultPersonFields.assignedTo
+       *
+       * The same fix leads to defaultPersonFields.assignedTo not being set on new leads
+       * In order for new leads to be properly assigned to the default agent, FUB API KEY
+       * boss.username - should be created by Default Agent user inside FUB Dashboard
+       */
+      // const defaultPersonFields = this.config.eventsCollection.defaultPersonFields;
+
+      // return person?.assignedUserId ? {
+      //   assignedUserId: person.assignedUserId,
+      // } : {
+      //   assignedTo: person?.assignedTo || defaultPersonFields.assignedTo
+      // }
+
+      if (person?.assignedUserId) {
+         return {
+            assignedUserId: person.assignedUserId
+         };
+      } else if (person?.assignedTo) {
+         return {
+            assignedTo: person.assignedTo
+         };
+      } else {
+         return {};
+      }
    }
    assignTags(person: BossEventsCreateRequest["person"]) {
       const defaultPersonFields = this.config.eventsCollection.defaultPersonFields;

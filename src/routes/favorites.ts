@@ -3,9 +3,10 @@ import { container } from "tsyringe";
 import { Middleware } from "koa-jwt";
 import { ApiError } from "../lib/errors.js";
 import FavoritesService from "../services/favorites.js";
-import { favoritesCreateSchema, favoritesDeleteSchema } from "../validate/favorites.js";
+import { favoritesCreateSchema, favoritesDeleteSchema, favoritesGetSchema } from "../validate/favorites.js";
 import type { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
 import SelectSavePropertyParams from "../services/eventsCollection/selectors/selectSavePropertyParams.js";
+import { getBody } from "../lib/utils.js";
 const router = new Router({
    prefix: "/favorites"
 });
@@ -45,7 +46,7 @@ router.post("/", authMiddleware, async (ctx, next) => {
       error,
       value
    } = favoritesCreateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.state["user"].sub
    });
    if (error) {
@@ -73,6 +74,22 @@ router.post("/", authMiddleware, async (ctx, next) => {
  *       summary: Use this endpoint to retrieve a list of properties that a client has favorited.
  *       security:
  *          - bearerAuth: []
+ *       parameters:
+ *          - in: query
+ *            name: sortBy
+ *            schema:
+ *               $ref: '#/components/schemas/RplSortBy'
+ *            description: The attribute that the favorited listings will be sorted by. Note, distanceAsc and distanceDesc must be used in combination with lat and long parameters.
+ *          - in: query
+ *            name: lat
+ *            schema:
+ *               type: string
+ *            description: Latitude used together with long to sort favorited listings by distance.
+ *          - in: query
+ *            name: long
+ *            schema:
+ *               type: string
+ *            description: Longitude used together with lat to sort favorited listings by distance.
  *       responses:
  *          400:
  *             $ref: '#/components/responses/BadRequest'
@@ -81,8 +98,19 @@ router.post("/", authMiddleware, async (ctx, next) => {
  */
 router.get("/", authMiddleware, async ctx => {
    ctx.state['enable.xff'] = true;
+   const {
+      error,
+      value
+   } = favoritesGetSchema.validate({
+      ...ctx.request.query,
+      clientId: ctx.state["user"].sub
+   });
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
    const favoritesService = ctx.state.container.resolve(FavoritesService);
-   ctx.body = await favoritesService.get(ctx.state["user"].sub);
+   ctx.body = await favoritesService.get(value);
 });
 
 /**

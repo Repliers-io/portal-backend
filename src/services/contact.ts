@@ -1,30 +1,31 @@
 import { inject, injectable } from "tsyringe";
 import RepliersService from "./repliers.js";
 import type { AppConfig } from "../config.js";
-import { ContactContactUsDto, ContactEstimateScheduleDto, ContactRequestInfoDto, ContactScheduleDto } from "../validate/contact.js";
+import { ContactUsDto, ScheduleEstimateDto, RequestInfoDto, ScheduleDto } from "../validate/contact.js";
 import { RplMessagesSendRequest } from "./repliers/messages.js";
 import SelectScheduleEstimateNoteParams from "./eventsCollection/selectors/selectScheduleEstimateNoteParams.js";
 import EventsCollectionService from "./eventsCollection/eventsCollection.js";
 import BaseEventCollectionSelector from "./eventsCollection/selectors/baseEventCollectionSelector.js";
 import SmtpService from './smtp.js';
 import { ApiError } from "../lib/errors.js";
-type ContactDTO = ContactContactUsDto | ContactScheduleDto | ContactRequestInfoDto | ContactEstimateScheduleDto;
+import { BossEventsCreateRequest } from "./boss.ts";
+type ContactDTO = ContactUsDto | ScheduleDto | RequestInfoDto | ScheduleEstimateDto;
 @injectable()
 export default class ContactService {
    constructor(@inject("config")
    private config: AppConfig, private repliers: RepliersService, private selectScheduleEstimateNoteParams: SelectScheduleEstimateNoteParams, private eventsCollectionService: EventsCollectionService, private baseEstimateSelector: BaseEventCollectionSelector, private smtp: SmtpService) {}
-   async contactUs(params: ContactContactUsDto) {
+   async contactUs(params: ContactUsDto) {
       return this.sendEmail({
          ...(await this.defaultMessageFields(params)),
          content: {
             message: `Name: ${params.name}\n
-                      email: ${params.email}\n
-                      phone: ${params.phone}\n
-                      message: ${params.message}\n`
+                      email: ${params.email ?? "—"}\n
+                      phone: ${params.phone ?? "—"}\n
+                      message: ${params.message ?? "—"}\n`
          }
       });
    }
-   async schedule(params: ContactScheduleDto) {
+   async schedule(params: ScheduleDto) {
       return this.sendEmail({
          ...(await this.defaultMessageFields(params)),
          content: {
@@ -36,6 +37,7 @@ export default class ContactService {
                       mlsNumber: ${params.mlsNumber}
                       method: ${params.method}
                       on date: ${params.date} at ${params.time}
+                      ${params.message ? `\nnote: ${params.message}` : ""}
                       `,
             listings: [params.mlsNumber]
             //TODO: form listing URL here?
@@ -43,7 +45,7 @@ export default class ContactService {
          }
       });
    }
-   async scheduleEstimate(params: ContactEstimateScheduleDto) {
+   async scheduleEstimate(params: ScheduleEstimateDto) {
       const defaults = await this.defaultMessageFields(params);
       const clientUrl = this.config.eventsCollection.clientUrl.replace('[CLIENT_ID]', defaults.clientId.toString());
       const estimate = await this.repliers.estimate.get({
@@ -75,43 +77,47 @@ export default class ContactService {
          ...noteParams,
          clientId: params.clientId || defaults.clientId
       });
-      if (!params.clientId) {
-         const owner = await this.repliers.clients.get(estimate.clientId);
-         const agent = await this.repliers.agents.get(owner.agentId);
-         this.eventsCollectionService.eventsCreate({
-            person: {
-               emails: [{
-                  value: params.email,
-                  type: "home"
-               }],
-               phones: [{
-                  value: params.phone,
-                  type: "home"
-               }],
-               name: params.name,
-               tags: ["schedule estimate"],
-               assignedUserId: agent.externalId ? +agent.externalId : undefined,
-               assignedTo: agent.externalId ? undefined : `${agent.fname} ${agent.lname}`
-            },
-            message: "Client requested to schedule a meeting regarding estimate",
-            description: `At ${params.date} ${params.time} regarding estimate ${estimateUrl}`,
-            property: {
-               street: estimate.payload?.address ? this.baseEstimateSelector.addressShort(estimate.payload?.address) : undefined,
-               city: estimate.payload?.address?.city
-            },
-            type: "General Inquiry",
-            ignoreDefaultTags: true
-         });
-      }
+      const agentId = estimate.clientId ? (await this.repliers.clients.get(estimate.clientId)).agentId : defaults.agentId;
+      const agent = await this.repliers.agents.get(agentId);
+      const eventCopy = !params.clientId ? {
+         message: "Client requested to schedule a meeting regarding estimate",
+         description: `At ${params.date} ${params.time} regarding estimate ${estimateUrl}`
+      } : {};
+      const event = {
+         person: {
+            emails: [{
+               value: params.email,
+               type: "home"
+            }],
+            phones: [{
+               value: params.phone,
+               type: "home"
+            }],
+            name: params.name,
+            tags: this.config.eventsCollection.eventTags.SelectScheduleEstimateNoteParams,
+            assignedUserId: agent.externalId ? +agent.externalId : undefined,
+            assignedTo: agent.externalId ? undefined : `${agent.fname} ${agent.lname}`
+         },
+         ...eventCopy,
+         // message: "Client requested to schedule a meeting regarding estimate",
+         // description: `At ${params.date} ${params.time} regarding estimate ${estimateUrl}`,
+         property: {
+            street: estimate.payload?.address ? this.baseEstimateSelector.addressShort(estimate.payload?.address) : undefined,
+            city: estimate.payload?.address?.city
+         },
+         type: "Property Inquiry",
+         ignoreDefaultTags: true
+      } as Partial<BossEventsCreateRequest>;
+      this.eventsCollectionService.eventsCreate(event);
    }
-   async requestInfo(params: ContactRequestInfoDto) {
+   async requestInfo(params: RequestInfoDto) {
       return this.sendEmail({
          ...(await this.defaultMessageFields(params)),
          content: {
             message: `Name: ${params.name}\n
-                      email: ${params.email}\n
-                      phone: ${params.phone}\n
-                      message: ${params.message}\n`,
+                      email: ${params.email ?? "—"}\n
+                      phone: ${params.phone ?? "—"}\n
+                      message: ${params.message ?? "—"}\n`,
             listings: [params.mlsNumber]
             //TODO: form listing URL here?
             //links: [], //[params.listingUrl]

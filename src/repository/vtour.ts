@@ -4,7 +4,7 @@ import { inject, injectable } from "tsyringe";
 import { Optional } from "../types/repliers.js";
 export enum VtourLinkType {
    youtube = "youtube",
-   text = "text",
+   text = "text"
 }
 export interface VtourLinks {
    type: VtourLinkType;

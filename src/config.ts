@@ -3,14 +3,19 @@ import dotenv from "dotenv";
 import { OAuthProviders, SocialProvider, UserRole } from "./constants.js";
 import { BossEventPerson, BossEventsCreateRequest, CustomBossField } from "./services/boss.js";
 import type { Knex } from "knex";
+import type { RplStandardStatus } from "./types/repliers.js";
 import path from "node:path";
 import { ConnectionOptions } from "@nats-io/transport-node";
 import { StringValue } from "ms";
 const __dirname = import.meta.dirname;
 import Settings from "./lib/settings.js";
+import { ImportantFields } from "./services/scrubber/listings.ts";
+import { RplLastStatus, RplStatus, RplYesNo, RplType } from "./types/repliers.ts";
+import { parseOtpMessageType, parseRplLastStatus, parseRplStatus, parseRplYesNo, parseRplType } from "./lib/config.utils.ts";
 const envFilePath = path.join(__dirname, "..", process.env["DOT_ENV_CONFIG"] || ".env");
 dotenv.config({
-   path: envFilePath
+   path: envFilePath,
+   quiet: true
 });
 export type JwtSettings = {
    privateKey: string;
@@ -18,14 +23,12 @@ export type JwtSettings = {
    issuer: string;
    expire: StringValue;
 };
-const otpMessageTypes = ["link", "code", "link_and_code"] as const;
-export type OtpMessageType = (typeof otpMessageTypes)[number];
-const parseOtpMessageType = (type: string | undefined): OtpMessageType => {
-   if (type === undefined || !otpMessageTypes.includes(type as OtpMessageType)) {
-      return "link_and_code";
-   }
-   return type as OtpMessageType;
-};
+export const otpMessageTypes = ["link", "code", "link_and_code"] as const;
+export type OtpMessageType = typeof otpMessageTypes[number];
+export interface FeaturedListingMapping {
+   slug: string;
+   clientId: number;
+}
 export interface AppConfig {
    env: string;
    db: Knex.Config;
@@ -47,7 +50,7 @@ export interface AppConfig {
       oauth: { [key in OAuthProviders]: {
          client_id: string;
          client_secret: string;
-         redirect_uri: string;
+         redirect_uri: string[];
          scopes: string;
       } };
       social: { [key in SocialProvider]: {
@@ -63,6 +66,7 @@ export interface AppConfig {
          message: string;
          message_type: OtpMessageType;
          debug_expose_code: boolean;
+         messageSubject: string | undefined;
       };
       emailtoken: {
          enabled: boolean;
@@ -74,9 +78,12 @@ export interface AppConfig {
       } };
    };
    app: {
-      settings: string | undefined; // Preset name, e.g. "defaults", "gta_portal"
+      settings: string | undefined; // Preset name, e.g. "defaults"
       env: string;
-      loglevel: string;
+      logging: {
+         gcp_logger_enabled: boolean;
+         loglevel: string;
+      };
       disable_persistence: boolean;
       port: string | number;
       stats_top_n: number;
@@ -85,6 +92,10 @@ export interface AppConfig {
          validDomains: [string, ...string[]];
       };
    };
+   redis: {
+      url: string;
+      keyv_enable: boolean;
+   };
    cache: {
       neighborhoodsranking: {
          ttl_ms: number;
@@ -92,20 +103,39 @@ export interface AppConfig {
       statswidget: {
          ttl_ms: number;
       };
+
+      /**
+       * @deprecated This method is deprecated in favor of the GET /locations.
+       */
       autosuggest_locations: {
          ttl_ms: number;
       };
       listingscount: {
          ttl_ms: number;
       };
+      featuredListings: {
+         ttl_ms: number;
+      };
+      buildingsSearch: {
+         ttl_ms: number;
+      };
+      buildingsSingle: {
+         ttl_ms: number;
+      };
+      locations: {
+         ttl_ms: number;
+      };
    };
    repliers: {
       api_key: string;
-      api_key_extra: string;
       historical_data_key: string;
+      cache_warmup_api_key: string;
       base_url: string;
       timeout_ms: number;
-      proxy_xff: boolean;
+      limit: number;
+      interval: number;
+      cache_warmup_limit: number;
+      cache_warmup_interval: number;
       clients: {
          defaultAgentId: number;
          unauthenticatedClientId: number;
@@ -118,12 +148,22 @@ export interface AppConfig {
          long: string;
          radius: number;
          provider: "mapbox" | "googlemaps";
+         listingStatus: RplStatus[];
+         listingLastStatus: RplLastStatus[];
+         listingStandardStatus: RplStandardStatus[] | undefined;
+         displayPublicValue: RplYesNo | undefined;
+         listingType: RplType[];
+         searchFields: string;
       };
-      limit: number;
-      interval: number;
       estimatesNotificationSettings?: {
          sendEmailNow?: boolean | undefined;
          sendEmailMonthly?: boolean | undefined;
+      };
+      proxy_xff: boolean;
+      xff: {
+         ssr_token: string;
+         ssg_token: string;
+         ssr_ipaddr_offset: number;
       };
    };
    boss: {
@@ -156,6 +196,20 @@ export interface AppConfig {
       savedSearchUrl?: string;
       customFieldsStrategy?: string | undefined;
       reportClientViewEstimate?: boolean | undefined;
+      eventTags: {
+         SelectSubscribeNewsletterParams: string[];
+         SelectScheduleEstimateNoteParams: string[];
+         SelectUnsubscribedParams: string[];
+      };
+      // Conditional FUB tags per form context (empty by default; set per tenant).
+      // Contact-us leads carry their own tag on the request; only the listing inquiry
+      // split is derived server-side, so only it needs config.
+      formTags?: {
+         inquiry?: {
+            sale?: string;
+            rent?: string;
+         }; // listing kind -> tag
+      };
    };
    mapbox: {
       access_token: string;
@@ -173,10 +227,23 @@ export interface AppConfig {
    };
    settings: {
       max_estimate_id: number;
-      scrubbing_ref_board_id: number;
-      scrubbing_duplicates_enabled: boolean;
-      scrubbing_board_ids: number[];
-      scrubbing_force_display_public_yes: boolean;
+      scrubbing: {
+         ref_board_id: number;
+         duplicates_enabled: boolean;
+         board_ids: number[];
+         force_display_public_yes: boolean;
+         dropFields: string[];
+         safeFields: string[];
+         safeAddressFields: string[];
+         importantFields: ImportantFields[];
+      };
+      // MLS-number prefix translation at the Repliers boundary. Some boards store
+      // mlsNumbers with a board prefix (e.g. NWMLS = "NWM…"). When set, we strip it
+      // from every response and re-add it to every Repliers request — the two halves
+      // of one round-trip, so a single value toggles the whole mechanism. Empty = off.
+      mlsNumberPrefix: string;
+      // MLS numbers this instance must never serve. Empty = off.
+      restrictedListings: string[];
       defaults: {
          boardId: number[];
          locations_boardId: number;
@@ -188,15 +255,16 @@ export interface AppConfig {
          boardId: number;
          active_count_limit: number;
       };
+      allowedListingsStandardStatuses: RplStandardStatus[] | undefined;
       hide_unavailable_listings_statuses: string[];
+      hide_unavailable_listings_standard_statuses: string[];
       hide_unavailable_listings_http_code: number;
       validationVersion?: string | undefined;
       extended_property_details: boolean;
-   };
-   xff: {
-      ssr_token: string;
-      ssg_token: string;
-      ssr_ipaddr_offset: number;
+      nlp: {
+         version: string;
+      };
+      featuredListings: FeaturedListingMapping[];
    };
    smtp: {
       enabled: boolean;
@@ -223,7 +291,7 @@ const config: AppConfig = {
          servers: [process.env["NATS_SERVER"] || "localhost:4222"],
          name: process.env["NATS_NAME"] || "dev-portal" // will be suffixed with script name :backend or :worker
       },
-      creds: process.env["NATS_CREDS"] || '',
+      creds: process.env["NATS_CREDS"] || "",
       worker: {
          consumer_stream: process.env["NATS_WORKER_CONSUMER_STREAM"] || "boss-people",
          consumer_name: process.env["NATS_WORKER_CONSUMER_NAME"] || "boss-people-worker"
@@ -233,6 +301,8 @@ const config: AppConfig = {
    db: {
       client: "pg",
       connection: {
+         // connectionString has highter priority if provided, if ommited we use individual params
+         connectionString: process.env['DATABASE_URL'] || undefined,
          host: process.env["DB_HOST"] || "localhost",
          port: parseInt(process.env["DB_PORT"] || "5432"),
          user: process.env["DB_USER"] || "postgres",
@@ -251,17 +321,22 @@ const config: AppConfig = {
          max: 5
       }
    },
+   redis: {
+      url: process.env["REDIS_URL"] || process.env["REDISCLOUD_URL"] || "redis://localhost:6379",
+      keyv_enable: process.env["REDIS_KEYV_ENABLE"] === "true"
+   },
    auth: {
       agents_signature_salt: process.env["AUTH_AGENTS_SIGNATURE_SALT"] || "repliers123",
       otp: {
          ttl_ms: parseInt(process.env["AUTH_OTP_TTL_MS"] || "600000"),
          // 10 min
-         resend_ttl_ms: parseInt(process.env['AUTH_OTP_RESEND_TTL_MS'] || '60000'),
+         resend_ttl_ms: parseInt(process.env["AUTH_OTP_RESEND_TTL_MS"] || "60000"),
          // 1 min
          uri: process.env["AUTH_OTP_URI"] || "http://localhost:3000/auth/otp/processing",
          message: process.env["AUTH_OTP_MESSAGE"] || "Please click on the link below to login",
          message_type: parseOtpMessageType(process.env["AUTH_OTP_MESSAGE_TYPE"]),
-         debug_expose_code: process.env["DEBUG_AUTH_OTP_EXPOSE_CODE"] === "true"
+         debug_expose_code: process.env["DEBUG_AUTH_OTP_EXPOSE_CODE"] === "true",
+         messageSubject: process.env["AUTH_OTP_MESSAGE_SUBJECT"] || undefined
       },
       emailtoken: {
          enabled: process.env["AUTH_EMAILTOKEN_ENABLED"] === "true",
@@ -278,13 +353,13 @@ const config: AppConfig = {
          google: {
             client_id: process.env["OAUTH_GOOGLE_CLIENT_ID"] || "",
             client_secret: process.env["OAUTH_GOOGLE_CLIENT_SECRET"] || "",
-            redirect_uri: process.env["OAUTH_GOOGLE_REDIRECT_URI"] || "",
-            scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
+            redirect_uri: (process.env["OAUTH_GOOGLE_REDIRECT_URI"] || "").split(',').map(v => v.trim()),
+            scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
          },
          facebook: {
             client_id: process.env["OAUTH_FACEBOOK_CLIENT_ID"] || "",
             client_secret: process.env["OAUTH_FACEBOOK_CLIENT_SECRET"] || "",
-            redirect_uri: process.env["OAUTH_FACEBOOK_REDIRECT_URI"] || "",
+            redirect_uri: (process.env["OAUTH_FACEBOOK_REDIRECT_URI"] || "").split(',').map(v => v.trim()),
             scopes: "openid"
          }
       },
@@ -305,16 +380,19 @@ const config: AppConfig = {
       }
    },
    app: {
-      settings: process.env['APP_SETTINGS_PRESET'],
+      settings: process.env["APP_SETTINGS_PRESET"],
       disable_persistence: process.env["APP_DISABLE_PERSISTENCE"] === "true",
       env: process.env["APP_ENVIRONMENT"] || "localhost",
       useSwagger: process.env["APP_USESWAGGER"] === "true" || false,
-      loglevel: process.env["LOGLEVEL"] || "info",
       port: process.env["PORT"] || 8080,
       stats_top_n: parseInt(process.env["APP_STATSTOP_LIMIT"] || "100"),
       // Need to move this to settings
       cors: {
-         validDomains: ["https://portal.repliers.com/", ...(process.env["APP_CORS_DOMAIN"] || "http://localhost:3000").split(',')]
+         validDomains: ["https://portal.repliers.com/", ...(process.env["APP_CORS_DOMAIN"] || "http://localhost:3000").split(",")]
+      },
+      logging: {
+         loglevel: process.env["LOGLEVEL"] || "info",
+         gcp_logger_enabled: process.env["APP_LOGGING_GCP_LOGGER_ENABLED"] === "true" || false
       }
    },
    logtail: {
@@ -327,20 +405,38 @@ const config: AppConfig = {
       neighborhoodsranking: {
          ttl_ms: parseInt(process.env["CACHE_NEIGHBORHOODSRANKING_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
       },
+      /**
+       * @deprecated This method is deprecated in favor of the GET /locations.
+       */
       autosuggest_locations: {
          ttl_ms: parseInt(process.env["CACHE_AUTOSUGGEST_LOCATIONS_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
       },
       listingscount: {
          ttl_ms: parseInt(process.env["CACHE_LISTINGS_COUNT_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
+      },
+      featuredListings: {
+         ttl_ms: parseInt(process.env["CACHE_FEATURED_LISTINGS_TTL"] || "3600000") // 1 hour
+      },
+      buildingsSearch: {
+         ttl_ms: parseInt(process.env["CACHE_BUILDINGS_SEARCH_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
+      },
+      buildingsSingle: {
+         ttl_ms: parseInt(process.env["CACHE_BUILDINGS_SINGLE_TTL"] || "3600000") // 1 hour
+      },
+      locations: {
+         ttl_ms: parseInt(process.env["CACHE_LOCATIONS_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
       }
    },
    repliers: {
       api_key: process.env["REPLIERS_API_KEY"] || "",
-      api_key_extra: process.env["REPLIERS_API_KEY_EXTRA"] || "",
       historical_data_key: process.env["REPLIERS_API_KEY_EXTRA"] || "",
+      cache_warmup_api_key: process.env["REPLIERS_CACHE_WARMUP_API_KEY"] || "",
       base_url: process.env["REPLIERS_BASE_URL"] || "https://api.repliers.io",
       timeout_ms: parseInt(process.env["REPLIERS_TIMEOUT"] || "30000"),
-      proxy_xff: process.env["REPLIERS_PROXY_XFF"] === "true",
+      limit: parseInt(process.env["REPLIERS_API_LIMIT"] || "1"),
+      interval: parseInt(process.env["REPLIERS_API_INTERVAL_MS"] || "1000"),
+      cache_warmup_limit: parseInt(process.env["REPLIERS_CACHE_WARMUP_API_LIMIT"] || process.env["REPLIERS_API_LIMIT"] || "1"),
+      cache_warmup_interval: parseInt(process.env["REPLIERS_CACHE_WARMUP_API_INTERVAL_MS"] || process.env["REPLIERS_API_INTERVAL_MS"] || "1000"),
       clients: {
          defaultAgentId: parseInt(process.env["REPLIERS_AGENT_ID"] || "0"),
          unauthenticatedClientId: parseInt(process.env["REPLIERS_UNAUTHENTICATED_CLIENT_ID"] || "0"),
@@ -352,13 +448,26 @@ const config: AppConfig = {
          lat: proximitySearchConfig.lat,
          long: proximitySearchConfig.long,
          radius: proximitySearchConfig.radius_m,
-         provider: process.env["REPLIERS_AUTOSUGGEST_PROVIDER"] === "googlemaps" ? "googlemaps" : "mapbox"
+         provider: process.env["REPLIERS_AUTOSUGGEST_PROVIDER"] === "googlemaps" ? "googlemaps" : "mapbox",
+         listingStatus: parseRplStatus(process.env["REPLIERS_AUTOSUGGEST_LISTING_STATUS"], [RplStatus.A]),
+         listingLastStatus: parseRplLastStatus(process.env["REPLIERS_AUTOSUGGEST_LISTING_LAST_STATUS"], [RplLastStatus.New, RplLastStatus.Ext, RplLastStatus.Pc]),
+         // Set by RESO-vocabulary instances; it replaces the legacy status pair above.
+         // Split, not parsed as an enum: the enum parser lowercases, and Repliers wants
+         // the cased values ("Active Under Contract") — same as allowedListingsStandardStatuses.
+         listingStandardStatus: process.env["REPLIERS_AUTOSUGGEST_LISTING_STANDARD_STATUS"] ? process.env["REPLIERS_AUTOSUGGEST_LISTING_STANDARD_STATUS"].split(",") as RplStandardStatus[] : undefined,
+         displayPublicValue: parseRplYesNo(process.env["REPLIERS_AUTOSUGGEST_DISPLAY_PUBLIC_VALUE"]),
+         listingType: parseRplType(process.env["REPLIERS_AUTOSUGGEST_LISTING_TYPE"], [RplType.Sale]),
+         searchFields: process.env["REPLIERS_AUTOSUGGEST_SEARCH_FIELDS"] || "address.streetName,mlsNumber,address.zip,address.streetNumber"
       },
-      limit: parseInt(process.env['REPLIERS_API_LIMIT'] || '1'),
-      interval: parseInt(process.env['REPLIERS_API_INTERVAL_MS'] || '1000'),
       estimatesNotificationSettings: {
-         sendEmailNow: typeof process.env['REPLIERS_ESTIMATES_SEND_EMAIL_NOW'] !== 'undefined' ? process.env['REPLIERS_ESTIMATES_SEND_EMAIL_NOW'].toLocaleLowerCase() === 'true' : undefined,
-         sendEmailMonthly: typeof process.env['REPLIERS_ESTIMATES_SEND_EMAIL_MONTHLY'] !== 'undefined' ? process.env['REPLIERS_ESTIMATES_SEND_EMAIL_MONTHLY'].toLocaleLowerCase() === 'true' : undefined
+         sendEmailNow: typeof process.env["REPLIERS_ESTIMATES_SEND_EMAIL_NOW"] !== "undefined" ? process.env["REPLIERS_ESTIMATES_SEND_EMAIL_NOW"].toLocaleLowerCase() === "true" : undefined,
+         sendEmailMonthly: typeof process.env["REPLIERS_ESTIMATES_SEND_EMAIL_MONTHLY"] !== "undefined" ? process.env["REPLIERS_ESTIMATES_SEND_EMAIL_MONTHLY"].toLocaleLowerCase() === "true" : undefined
+      },
+      proxy_xff: process.env["REPLIERS_PROXY_XFF"] === "true",
+      xff: {
+         ssr_token: process.env["XFF_SSR_TOKEN"] || process.env["REPLIERS_PROXY_XFF_SSR_TOKEN"] || "",
+         ssg_token: process.env["XFF_SSG_TOKEN"] || process.env["REPLIERS_PROXY_XFF_SSG_TOKEN"] || "",
+         ssr_ipaddr_offset: parseInt(process.env["XFF_SSR_IPADDR_OFFSET"] || process.env["REPLIERS_PROXY_XFF_SSR_IPADDR_OFFSET"] || "2")
       }
    },
    mapbox: {
@@ -407,8 +516,20 @@ const config: AppConfig = {
          source: process.env["BOSS_DEFAULT_SOURCE"] || "example.tld"
       },
       defaultPersonFields: {
+         /**
+          * NOTICE: there's a fix in EventsCollectionService.assignAgent() which now prevents leads flipping from their agent
+          * which is unknown to this system to default agent
+          * The same fix leads to defaultPersonFields.assignedTo not being set on new leads
+          * In order for new leads to be properly assigned to the default agent, FUB API KEY
+          * boss.username - should be created by Default Agent user inside FUB Dashboard
+          */
          assignedTo: process.env["BOSS_DEFAULT_ASSIGNED_TO"] || "Default Agent",
          tags: process.env["BOSS_DEFAULT_TAGS"]?.split(",") || [process.env["APP_ENVIRONMENT"] || "dev"]
+      },
+      eventTags: {
+         SelectSubscribeNewsletterParams: process.env["SETTINGS_EVENTS_COLLECTOR_EVENT_TAGS_SUBSCRIBE_NEWSLETTER"]?.split(",") || [],
+         SelectScheduleEstimateNoteParams: process.env["SETTINGS_EVENTS_COLLECTOR_EVENT_TAGS_SCHEDULE_ESTIMATE"]?.split(",") || [],
+         SelectUnsubscribedParams: process.env["SETTINGS_EVENTS_COLLECTOR_EVENT_TAGS_UNSUBSCRIBED"]?.split(",") || []
       },
       defaultBoardId: process.env["SETTINGS_EVENTS_COLLECTOR_DEFAULT_BOARD_ID"] || "12",
       urlHost: process.env["SETTINGS_EVENTS_COLLECTOR_URL_HOST"] || undefined,
@@ -421,30 +542,39 @@ const config: AppConfig = {
    },
    settings: {
       max_estimate_id: parseInt(process.env["SETTINGS_MAX_ESTIMATE_ID"] || "100000"),
-      scrubbing_ref_board_id: parseInt(process.env["DUPLICATES_REFERENCE_BOARD_RESOURCE_ID"] || "9997"),
-      scrubbing_board_ids: (process.env["SETTINGS_SCRUBBING_BOARDIDS"] || "12").split(",").map(v => parseInt(v)),
-      scrubbing_duplicates_enabled: process.env["SETTINGS_SCRUBBING_PROCESS_DUPLICATES_ENABLED"] !== "false",
-      scrubbing_force_display_public_yes: process.env["SETTINGS_SCRUBBING_FORCE_DISPLAY_PUBLIC_YES"] === "true",
+      scrubbing: {
+         ref_board_id: parseInt(process.env["DUPLICATES_REFERENCE_BOARD_RESOURCE_ID"] || "9997"),
+         board_ids: (process.env["SETTINGS_SCRUBBING_BOARDIDS"] || "12").split(",").map(v => parseInt(v)),
+         duplicates_enabled: process.env["SETTINGS_SCRUBBING_PROCESS_DUPLICATES_ENABLED"] !== "false",
+         force_display_public_yes: process.env["SETTINGS_SCRUBBING_FORCE_DISPLAY_PUBLIC_YES"] === "true",
+         dropFields: (process.env["SETTINGS_SCRUBBING_DROP_FIELDS"] || "history,agents,raw").split(","),
+         safeFields: (process.env["SETTINGS_SCRUBBING_SAFE_FIELDS"] || "address,class,map,propertyType,type,mlsNumber,permissions,status,boardId,listDate,imageInsights,duplicates,resource,images").split(","),
+         safeAddressFields: (process.env["SETTINGS_SCRUBBING_SAFE_ADDRESS_FIELDS"] || "area,city,streetDirection,streetName,streetDirectionPrefix,district,streetSuffix,neighborhood,state,majorIntersection,communityCode,country,zip").split(","),
+         importantFields: (process.env["SETTINGS_SCRUBBING_IMPORTANT_FIELDS"] || "boardId").split(",") as ImportantFields[]
+      },
+      mlsNumberPrefix: process.env["SETTINGS_MLSNUMBER_PREFIX"] || "",
+      restrictedListings: (process.env["SETTINGS_RESTRICTED_LISTINGS"] || "").split(",").filter(Boolean),
       defaults: {
          boardId: (process.env["APP_DEFAULTS_BOARDIDS"] || "110").split(",").map(v => parseInt(v)),
          locations_boardId: parseInt(process.env["APP_LOCATIONS_BOARDID"] || "110")
       },
       locations: {
-         drop_coordinates: process.env["SETTINGS_LOCATIONS_DROP_COORDINATES"] === 'true',
-         allow_all_areas: process.env["SETTINGS_LOCATIONS_ALLOW_ALL_AREAS"] === 'true',
-         allowed_areas: (process.env["SETTINGS_LOCATIONS_ALLOWED_AREAS"] || "").split(',').map(v => v.toLowerCase()),
+         drop_coordinates: process.env["SETTINGS_LOCATIONS_DROP_COORDINATES"] === "true",
+         allow_all_areas: process.env["SETTINGS_LOCATIONS_ALLOW_ALL_AREAS"] === "true",
+         allowed_areas: (process.env["SETTINGS_LOCATIONS_ALLOWED_AREAS"] || "").split(",").map(v => v.toLowerCase()),
          boardId: parseInt(process.env["APP_LOCATIONS_BOARDID"] || "110"),
          active_count_limit: parseInt(process.env["SETTINGS_LOCATIONS_ACTIVE_COUNT_LIMIT"] || "5")
       },
-      hide_unavailable_listings_statuses: process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STATUSES"] ? process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STATUSES"].split(",") : ['Ter'],
+      allowedListingsStandardStatuses: process.env["APP_ALLOWED_LISTINGS_STANDARD_STATUSES"] ? process.env["APP_ALLOWED_LISTINGS_STANDARD_STATUSES"].split(",") as RplStandardStatus[] : undefined,
+      hide_unavailable_listings_statuses: process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STATUSES"] ? process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STATUSES"].split(",") : [],
+      hide_unavailable_listings_standard_statuses: process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STANDARD_STATUSES"] ? process.env["APP_HIDE_UNAVAILABLE_LISTINGS_STANDARD_STATUSES"].split(",") : [],
       hide_unavailable_listings_http_code: process.env["APP_HIDE_UNAVAILABLE_LISTINGS_HTTP_CODE"] ? parseInt(process.env["APP_HIDE_UNAVAILABLE_LISTINGS_HTTP_CODE"]) : 410,
       validationVersion: process.env["SETTINGS_VALIDATION_VERSION"],
-      extended_property_details: process.env["SETTINGS_EXTENDED_PROPERTY_DETAILS"] === 'true'
-   },
-   xff: {
-      ssr_token: process.env["XFF_SSR_TOKEN"] || "",
-      ssg_token: process.env["XFF_SSG_TOKEN"] || "",
-      ssr_ipaddr_offset: parseInt(process.env["XFF_SSR_IPADDR_OFFSET"] || "2")
+      extended_property_details: process.env["SETTINGS_EXTENDED_PROPERTY_DETAILS"] === "true",
+      nlp: {
+         version: process.env["SETTINGS_NLP_VERSION"] || "3"
+      },
+      featuredListings: process.env["SETTINGS_FEATURED_LISTINGS"] ? JSON.parse(process.env["SETTINGS_FEATURED_LISTINGS"]) as FeaturedListingMapping[] : []
    },
    smtp: {
       enabled: process.env["SMTP_ENABLED"] === "true",
@@ -458,8 +588,15 @@ assert(config.mapbox.access_token, "No MAPBOX_ACCESS_TOKEN env variable");
 assert(config.repliers.api_key, "No REPLIERS_API_KEY env variable");
 assert(config.auth.jwt.privateKey, "No JWT_PRIVATE_KEY env variable");
 assert(config.auth.jwt.publicKey, "No JWT_PUBLIC_KEY env variable");
+
+// The warmup key is selected by the SSG token pair, never by the request itself:
+// an unset XFF_SSG_TOKEN silently routes every build and ISR request to the live
+// key and the shared throttler, which looks identical to a working deploy.
+if (config.repliers.cache_warmup_api_key) {
+   assert(config.repliers.xff.ssg_token, "REPLIERS_CACHE_WARMUP_API_KEY is set but XFF_SSG_TOKEN is empty - SSG traffic can never select the warmup key");
+}
 if (config.boss.webhook.enabled) {
-   assert(config.boss.system !== '', "Please, specify some unique BOSS_SYSTEM to avoid issues with outher developers");
+   assert(config.boss.system !== "", "Please, specify some unique BOSS_SYSTEM to avoid issues with outher developers");
    if (config.boss.webhook.use_ngrok) {
       assert(config.ngrok.authtoken, "No NGROK_AUTHTOKEN env variable");
    }

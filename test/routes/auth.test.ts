@@ -117,6 +117,7 @@ describe("Auth", function () {
          assert.equal(signupResponse.body.userMessage, "Error ensuring user can receive email");
       });
       it("Should deny signup user with wrong otp code", async function () {
+         this.slow(1000);
          const userStub = _.omit(userFixture, "phone");
          mockUserCreate({
             email: userFixture.email,
@@ -185,6 +186,8 @@ describe("Auth", function () {
             email: userFixture.email
          });
          assert.equal(secondAttempt.status, 403);
+         const retryAfter = Number(secondAttempt.headers["retry-after"]);
+         assert.ok(retryAfter > 0 && retryAfter <= 60, `expected Retry-After in (0, 60], got ${secondAttempt.headers["retry-after"]}`);
 
          // todo: testing successful login after a minute of waiting is not trivial as mocha's this.timeout() doesn't trigger OTP storage cleanup by TTL
       });

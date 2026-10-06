@@ -13,6 +13,7 @@ describe("Stats", function () {
    });
    describe("Neighborghood rankings", function () {
       it("Should be able to calulate neighborhood rankings stats", async function () {
+         this.slow(1000);
          mockNbStats();
          const token = generateAuthToken({
             email: "test@user",

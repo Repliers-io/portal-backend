@@ -1,9 +1,11 @@
-import Router, { Middleware } from "@koa/router";
+import Router from "@koa/router";
 import { container } from "tsyringe";
 import { ApiError } from "../../lib/errors.js";
 import { userBossTagSchema } from "../../validate/user/boss.js";
 import BossService from "../../services/boss.js";
 import UserService from "../../services/user.js";
+import { getBody } from "../../lib/utils.js";
+import { Middleware } from "koa";
 const authMiddleware = container.resolve<Middleware>("middleware.jwt");
 const router = new Router({
    prefix: "/boss"
@@ -38,11 +40,12 @@ const router = new Router({
  *              description: Tags successfully added or have been added before
  */
 router.post("/tag", authMiddleware, async ctx => {
+   ctx.state["enable.xff"] = true;
    const {
       error,
       value
    } = userBossTagSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       userId: ctx.state?.["user"]?.sub
    });
    if (error) {
@@ -50,7 +53,7 @@ router.post("/tag", authMiddleware, async ctx => {
       return;
    }
    const bossService = container.resolve(BossService);
-   const userService = container.resolve(UserService);
+   const userService = ctx.state.container.resolve(UserService);
    const user = await userService.info(value.userId);
    if (!user || !user.externalId) {
       ctx.throw(new ApiError("User not found", 404));

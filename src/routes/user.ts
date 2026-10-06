@@ -7,6 +7,9 @@ import { userUpdateSchema } from "../validate/user.js";
 import assets from './user/assets.js';
 import social from './user/social.js';
 import boss from './user/boss.js';
+import { getBody } from "../lib/utils.js";
+import type { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
+import SelectUnsubscribedParams from "../services/eventsCollection/selectors/selectUnsubscribedParams.js";
 const router = new Router({
    prefix: "/user"
 });
@@ -56,13 +59,13 @@ const pathThroughMiddleware = container.resolve<Middleware>("middleware.jwt.pass
  *          401:
  *             $ref: '#/components/responses/Unauthorized'
  */
-router.patch("/", authMiddleware, async ctx => {
+router.patch("/", authMiddleware, async (ctx, next) => {
    ctx.state['enable.xff'] = true;
    const {
       error,
       value
    } = userUpdateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.state["user"].sub
    });
    if (error) {
@@ -71,6 +74,17 @@ router.patch("/", authMiddleware, async ctx => {
    }
    const userService = ctx.state.container.resolve(UserService);
    ctx.body = await userService.update(value);
+   next();
+}, (ctx, next) => {
+   const eventsCollectionMiddleware = ctx.state.container.resolve<EventsCollectionMiddleware>("middleware.eventsCollection");
+   const selector = ctx.state.container.resolve(SelectUnsubscribedParams);
+   const collector = eventsCollectionMiddleware({
+      selector: selector.select,
+      options: {
+         allowIncognito: false
+      }
+   });
+   return collector(ctx, next);
 });
 
 /**

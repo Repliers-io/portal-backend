@@ -3,7 +3,7 @@ import router from "./routes/index.js";
 import { container } from "tsyringe";
 import { ApiError } from "./lib/errors.js";
 import type pino from "pino";
-import { AppConfig } from "config.js";
+import { AppConfig } from "./config.js";
 const app = new Koa();
 app.use(async (ctx, next) => {
    try {
@@ -14,8 +14,7 @@ app.use(async (ctx, next) => {
       logger.error(err);
       // Handle app-level errors
       if (err instanceof ApiError) {
-         // Special case for 429 / Retry after
-         if (err.status === 429 && err.opts && err.opts["Retry-After"]) {
+         if (err.opts && err.opts["Retry-After"]) {
             ctx.set("Retry-After", err.opts["Retry-After"]);
          }
          ctx.status = err.status || 500;

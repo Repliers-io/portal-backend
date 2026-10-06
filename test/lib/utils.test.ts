@@ -1,6 +1,14 @@
 import assert from "assert";
-import { howSimilar, normalizePhoneNumber, normalizeEmail, calcSignature, secureFubAvmLink } from "../../src/lib/utils.js";
+import { howSimilar, normalizePhoneNumber, normalizeEmail, calcSignature, secureFubAvmLink, withRequiredFields } from "../../src/lib/utils.js";
 describe("howSimilar tests", function () {
+   it("Should return 0 when the target is missing (estimate payload without address)", function () {
+      assert.equal(howSimilar({
+         city: "Ottawa"
+      }, undefined), 0);
+      assert.equal(howSimilar({
+         city: "Ottawa"
+      }, null), 0);
+   });
    it("Should calculate similarity of two objects", function () {
       const params = {
          city: "Ottawa",
@@ -126,6 +134,28 @@ describe("normalizeEmail tests", function () {
    it("Should preserve special characters in valid email", function () {
       const result = normalizeEmail("test.name+tag@example-site.co.uk");
       assert.equal(result, "test.name+tag@example-site.co.uk");
+   });
+});
+describe("withRequiredFields tests", function () {
+   it("Should append required fields to an existing csv", function () {
+      const result = withRequiredFields("listPrice,soldPrice", ["boardId", "status"]);
+      assert.equal(result, "listPrice,soldPrice,boardId,status");
+   });
+   it("Should return only required fields when csv is empty", function () {
+      const result = withRequiredFields("", ["boardId", "status"]);
+      assert.equal(result, "boardId,status");
+   });
+   it("Should return only required fields when csv is undefined", function () {
+      const result = withRequiredFields(undefined, ["boardId", "status"]);
+      assert.equal(result, "boardId,status");
+   });
+   it("Should not duplicate fields already present in the csv", function () {
+      const result = withRequiredFields("listPrice,boardId", ["boardId", "status"]);
+      assert.equal(result, "listPrice,boardId,status");
+   });
+   it("Should drop empty segments produced by stray commas", function () {
+      const result = withRequiredFields("listPrice,,status,", ["boardId"]);
+      assert.equal(result, "listPrice,status,boardId");
    });
 });
 describe("Secure FUB AVM Link tests", () => {

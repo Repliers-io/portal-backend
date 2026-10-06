@@ -124,6 +124,7 @@ export interface EstimatePropertyDetailsDto {
    streetSuffix: string;
    streetDirection: string;
    clientId: number;
+   searchStrategy: string[];
 }
 export const estimatePropertyDetailsSchema = joi.object<EstimatePropertyDetailsDto>().keys({
    city: joi.string().required(),
@@ -133,7 +134,8 @@ export const estimatePropertyDetailsSchema = joi.object<EstimatePropertyDetailsD
    streetSuffix: joi.string(),
    streetDirection: joi.string(),
    zip: joi.string(),
-   clientId: joi.number()
+   clientId: joi.number(),
+   searchStrategy: joi.array().items(joi.string().valid("streetSuffixInStreetName")).single()
 });
 export interface EstimatesByClientIdGetDto {
    clientId: number;

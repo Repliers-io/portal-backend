@@ -1,11 +1,11 @@
 import { UserRole } from "../constants.js";
 import crypto from "crypto";
 import _ from "lodash";
-export const howSimilar = (pattern: Record<string, unknown>, target: Record<string, unknown>) => {
+export const howSimilar = (pattern: Record<string, unknown>, target: Record<string, unknown> | null | undefined) => {
    const all = Object.keys(pattern).length;
    let found = 0;
    for (const key in pattern) {
-      if (key in target && target[key] == pattern[key]) {
+      if (target && key in target && target[key] == pattern[key]) {
          found++;
       }
    }
@@ -81,4 +81,20 @@ export function maybeRole(role: number | string | null | undefined): UserRole | 
    }
    const roleNumber = typeof role === "number" ? role : Number(role);
    return Object.values(UserRole).find(r => r === roleNumber) as UserRole | undefined;
+}
+export function getBody(body: any | undefined) {
+   if (_.isString(body) || _.isUndefined(body)) {
+      return {};
+   }
+   return body;
+}
+
+/**
+ * Merges a comma-separated field list with a set of required fields, dropping
+ * empty segments and de-duplicating while preserving order (existing first).
+ * Used to guarantee identity fields on both `fields` and `clusterFields`.
+ */
+export function withRequiredFields(csv: string | undefined, required: string[]): string {
+   const merged = [...(csv ? csv.split(",") : []), ...required].filter(Boolean);
+   return [...new Set(merged)].join(",");
 }

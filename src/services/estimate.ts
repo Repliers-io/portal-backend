@@ -6,7 +6,7 @@ import { RplSortBy, RplStatus, RplYesNo } from "../types/repliers.js";
 import RepliersEstimate, { RplEstimateAddDto, RplEstimateAddData, RplEstimateAddRequest, RplEstimateAddResponse, RplEstimateCore, RplEstimateSingle } from "./repliers/estimate.js";
 import _debug from "debug";
 import { ApiError } from "../lib/errors.js";
-import type { AppConfig } from "config.js";
+import type { AppConfig } from "../config.js";
 import { UserRole } from "../constants.js";
 import UserService from "./user.js";
 import dayjs from "dayjs";
@@ -92,14 +92,24 @@ export default class EstimateService {
          similarity
       };
    }
+   private applySearchStrategy(params: EstimatePropertyDetailsDto): Pick<RplListingsSearchRequest, "streetName" | "streetSuffix"> {
+      if (params.searchStrategy?.includes("streetSuffixInStreetName") && params.streetSuffix) {
+         return {
+            streetName: [params.streetName, `${params.streetName} ${params.streetSuffix}`]
+         };
+      }
+      return {
+         streetName: params.streetName,
+         streetSuffix: params.streetSuffix
+      };
+   }
    private async findListingByAddress(params: EstimatePropertyDetailsDto): Promise<RplListingsSingle | undefined> {
-      const searchParams = {
+      const searchParams: RplListingsSearchRequest = {
          listings: true,
          status: [RplStatus.U, RplStatus.A],
          city: [params.city],
-         streetName: params.streetName,
+         ...this.applySearchStrategy(params),
          streetNumber: params.streetNumber,
-         streetSuffix: params.streetSuffix,
          streetDirection: params.streetDirection,
          zip: params.zip,
          unitNumber: params.unitNumber,
@@ -146,20 +156,19 @@ export default class EstimateService {
       return today.getMonth() < 6 ? today.getFullYear() - 1 : today.getFullYear(); // we want to use prev year stats if we are before June
    }
    private getListingTaxYear(listing: RplListingsSingle): number {
-      const assessmentYear = listing.taxes.assessmentYear || listing.listDate || listing.updatedOn;
+      const assessmentYear = listing.taxes?.assessmentYear || listing.listDate || listing.updatedOn;
       return new Date(assessmentYear).getFullYear();
    }
    private async adjustPropertyTax(listing: RplListingsSingle): Promise<RplListingsSingle> {
       const currentTaxYear = this.getCurrentTaxYear();
       const listingTaxYear = this.getListingTaxYear(listing);
       const MINIMUM_REQUIRED_RECORDS = 15;
-      const {
-         address
-      } = listing;
+      const city = listing.address?.["city"] as string | undefined;
+      if (!city) return listing;
       const statKey = 'avg';
       const searchParams = {
          status: [RplStatus.U, RplStatus.A],
-         city: [address['city'] as string],
+         city: [city],
          statistics: `${statKey}-tax,grp-yr`,
          listings: false,
          class: [rplListingClassToRplClassMapper[listing.class]],
@@ -169,17 +178,18 @@ export default class EstimateService {
          debug("[propertyDetails] adjustPropertyTax fetching tax stats %O", searchParams);
          const response = await (this.historicalServiceEnabled ? this.historicalListings.search(searchParams) : this.listings.search(searchParams));
          debug("[propertyDetails] adjustPropertyTax fetched tax stats %O", response);
-         const {
-            statistics
-         } = response;
-         const listingYearStats = statistics.tax.yr?.[`${listingTaxYear}`];
-         const currentYearStats = statistics.tax.yr?.[`${currentTaxYear}`];
+         const yr = response.statistics?.tax?.yr;
+         const listingYearStats = yr?.[`${listingTaxYear}`];
+         const currentYearStats = yr?.[`${currentTaxYear}`];
          const noListingYearStats = !listingYearStats || listingYearStats.count < MINIMUM_REQUIRED_RECORDS || !listingYearStats[statKey];
          const noCurrentYearStats = !currentYearStats || currentYearStats.count < MINIMUM_REQUIRED_RECORDS || !currentYearStats[statKey];
 
          // if no tax for current listing, use current year med
-         if (!listing.taxes.annualAmount) {
-            listing.taxes.annualAmount = currentYearStats?.[statKey] || 0;
+         if (!listing.taxes?.annualAmount) {
+            listing.taxes = {
+               ...listing.taxes,
+               annualAmount: currentYearStats?.[statKey] || 0
+            };
             return listing;
          }
 
@@ -227,8 +237,9 @@ export default class EstimateService {
             return result;
          }
          const closest = this.findClosestLocation(params, listings);
-         if (closest && closest.address['neighborhood']) {
-            result['neighborhood'] = String(closest.address['neighborhood']);
+         const neighborhood = closest?.address?.['neighborhood'];
+         if (neighborhood) {
+            result['neighborhood'] = String(neighborhood);
          }
       } catch (err) {
          debug("[propertyDetails] getAddressData error %O", err);
@@ -246,10 +257,11 @@ export default class EstimateService {
 
       debug("[propertyDetails] findClosestLocation in %O listings", listings.length);
       for (const listing of listings) {
-         if (!listing.address['streetNumber'] || isNaN(+listing.address['streetNumber'])) {
+         const streetNumber = listing.address?.['streetNumber'];
+         if (!streetNumber || isNaN(+streetNumber)) {
             continue;
          }
-         const listingStreetNumber = +listing.address['streetNumber'];
+         const listingStreetNumber = +streetNumber;
          const distance = Math.abs(targetStreetNumber - listingStreetNumber);
          const isSameParity = targetStreetNumber % 2 === listingStreetNumber % 2;
          if (isSameParity && distance <= minimumSatisfactoryDistance) {
@@ -290,11 +302,10 @@ export default class EstimateService {
       try {
          debug("[getAverageTax] search %O", search);
          const response = await this.listings.search(search);
-         const {
-            statistics
-         } = response;
+         const med = response.statistics?.tax?.med;
+         if (med == null) return undefined;
          return {
-            annualAmount: statistics.tax.med,
+            annualAmount: med,
             assessmentYear: this.getCurrentTaxYear()
          };
       } catch (err) {
@@ -316,9 +327,9 @@ export default class EstimateService {
          zip: params.zip
       };
       const mostSimilar = prevEstimates.sort((a, b) => {
-         return howSimilar(simParams, a.payload.address!) > howSimilar(simParams, b.payload.address!) ? -1 : 1;
+         return howSimilar(simParams, a.payload?.address) > howSimilar(simParams, b.payload?.address) ? -1 : 1;
       }).at(0);
-      const similarity = mostSimilar ? howSimilar(simParams, mostSimilar.payload.address!) : undefined;
+      const similarity = mostSimilar ? howSimilar(simParams, mostSimilar.payload?.address) : undefined;
       return {
          mostSimilar,
          similarity
@@ -367,13 +378,13 @@ export default class EstimateService {
          throw new ApiError("Not found", 404);
       }
       let result = estimates.at(0)!;
-      if ("data" in result.payload) {
+      if (result.payload?.data) {
          result = this.adjustEstimates<typeof result>(result, result.payload.data);
       }
       return result;
    }
    private adjustHistory(result: RplEstimateCore /*RplEstimateSingle | RplEstimateAddResponse*/, delta: number) {
-      if (delta > 0 && 'history' in result && 'mth' in result.history) {
+      if (delta > 0 && result.history?.mth) {
          for (const [, estimate] of Object.entries(result.history.mth)) {
             estimate.value += delta;
          }
@@ -406,7 +417,7 @@ export default class EstimateService {
          clientId
       });
       return estimates.map(result => {
-         if ("data" in result.payload) {
+         if (result.payload?.data) {
             result = this.adjustEstimates(result, result.payload.data);
          }
          return result;
@@ -432,6 +443,7 @@ export default class EstimateService {
          return false;
       }
       if (userRole === UserRole.Agent) {
+         if (!estimate.clientId) return false; // guest estimate has no owner
          const client = await this.usersService.info(estimate.clientId);
          return String(userId) === String(client.agentId);
       } else if (userRole === UserRole.User) {

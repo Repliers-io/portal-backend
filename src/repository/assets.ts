@@ -4,7 +4,7 @@ import { inject, injectable } from "tsyringe";
 // Update Assets Interface if you need to add another asset type
 // Also, don't forget to update validators/user/assets.ts with new validators for new asset types
 export const AssetTypesArray = ["image-favorites"] as const;
-export type AssetType = (typeof AssetTypesArray)[number];
+export type AssetType = typeof AssetTypesArray[number];
 
 // Update AssetTypesArray if you need to add another asset type
 export interface Assets {

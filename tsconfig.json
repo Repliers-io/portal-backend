@@ -1,22 +1,21 @@
 {
    "extends": [
       "./node_modules/@tsconfig/strictest/tsconfig.json",
-      "./node_modules/@tsconfig/node20/tsconfig.json"
+      "./node_modules/@tsconfig/node24/tsconfig.json"
    ],
-   "exclude": ["node_modules", "test", "dist", "coverage", "**/node_modules/*"],
+   "exclude": ["node_modules", "dist", "coverage", "**/node_modules/*"],
+   "include": ["src"],
    "compilerOptions": {
+      "rootDir": "src",
       "rootDirs": ["src", "test"],
-      "baseUrl": "./src",
       "outDir": "dist",
+      "sourceMap": true,
       "noErrorTruncation": true,
       // for tsyringe / decorators
       "experimentalDecorators": true,
       "emitDecoratorMetadata": true,
-      "noImplicitOverride": false
-   },
-   "ts-node": {
-      "esm": true,
-      "swc": true,
-      "files": true
+      "noImplicitOverride": false,
+      "rewriteRelativeImportExtensions": true,
+      "types": ["mocha"]
    }
 }

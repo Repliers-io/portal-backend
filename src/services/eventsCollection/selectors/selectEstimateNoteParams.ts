@@ -3,6 +3,7 @@ import _debug from "debug";
 import BaseEventCollectionSelector from "./baseEventCollectionSelector.js";
 import { RplEstimateAddResponse, RplEstimateSingle } from "../../repliers/estimate.js";
 import { NotesCollectionPropertiesSelector } from "../eventsCollection.js";
+import { BossNoteCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectEstimateNoteParams");
 export interface EstimateNoteParams {
    estimate: RplEstimateSingle | RplEstimateAddResponse;
@@ -25,7 +26,7 @@ export default class SelectEstimateNoteParams {
          if (!estimateUrl) {
             debug("Estimate URL is missing for the provided estimate", ctx.response.body);
          }
-         return {
+         const payload = {
             subject: `Seller Inquire details for ${details.type} property at ${details.address}`,
             clientId: details.clientId,
             body: `
@@ -41,7 +42,8 @@ export default class SelectEstimateNoteParams {
                   </p>` : ""}
              `,
             isHtml: true
-         };
+         } as BossNoteCreateRequest;
+         return payload;
       } catch (error) {
          debug("Failed to generate note params due to error %O", error);
          return null;

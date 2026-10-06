@@ -19,12 +19,21 @@ if [ "$count1" -eq "$count2" ]; then
    echo "Both directories have the same number of files."
    exit 0
 else
-   echo "There is new migrations in ts directory which doesnt exist in js directory, please run \033[1mnpm run build\033[0m before migration"
-   read -p "Run it now? " -n 1 -r
-   if [[ $REPLY =~ ^[Yy]$ ]] || [[ $ALL_YES ]]
-   then
+   echo "There are new migrations in ts directory which don't exist in js directory, please run \033[1mnpm run build\033[0m before migration"
+
+   if [ -t 0 ]; then
+      # Interactive terminal available
+      read -p "Run it now? " -n 1 -r
+      echo
+      if [[ $REPLY =~ ^[Yy]$ ]] || [[ $ALL_YES ]]; then
+         npm run build
+         exit 0
+      fi
+      exit 1
+   else
+      # Non-interactive (Heroku, CI, etc.)
+      echo "Non-interactive mode detected, running build automatically..."
       npm run build
       exit 0
    fi
-   exit 1
 fi
