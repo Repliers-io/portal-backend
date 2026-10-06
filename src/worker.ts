@@ -7,6 +7,10 @@ import type { Logger } from "pino";
 import streams from "./streams/index.js";
 import pRetry from "p-retry";
 const logger = container.resolve<Logger>("logger.global");
+process.on("uncaughtExceptionMonitor", (err, origin) => logger.fatal({
+   err,
+   origin
+}, "Fatal"));
 const jsc = await pRetry(() => container.resolve<Promise<JetStreamClient>>("nats"), {
    onFailedAttempt: error => {
       logger.error(`Establishing NATS connection, attempt ${error.attemptNumber} failed. There are ${error.retriesLeft} retries left.`);

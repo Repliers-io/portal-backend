@@ -105,13 +105,13 @@ export interface RplEstimateCore {
    estimateHigh: number;
    confidence: number;
    history?: {
-      mth: Record<string, {
+      mth?: Record<string, {
          value: number;
       }>;
-   };
+   } | null;
 }
 export interface RplEstimateSingle extends RplEstimateCore {
-   clientId: number;
+   clientId?: number; // absent on guest estimates
    createdOn: string;
    updatedOn: string | null;
    sendEmailMonthly: boolean;

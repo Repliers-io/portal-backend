@@ -2,13 +2,14 @@ import Router from "@koa/router";
 import { container } from "tsyringe";
 import { Middleware } from "koa-jwt";
 import { ApiError } from "../lib/errors.js";
-import { maybeClientId } from "../lib/utils.js";
-import { contactContactusSchema, contactRequestInfoSchema, contactScheduleEstimateSchema, contactScheduleSchema } from "../validate/contact.js";
+import { getBody, maybeClientId } from "../lib/utils.js";
+import { contactSchema, requestInfoSchema, scheduleEstimateSchema, scheduleSchema, subscribeNewsletterSchema } from "../validate/contact.js";
 import ContactService from "../services/contact.js";
 import type { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
 import SelectContactUsParams from "../services/eventsCollection/selectors/selectContactUsParams.js";
 import SelectRequestInfoParams from "../services/eventsCollection/selectors/selectRequestInfoParams.js";
 import SelectScheduleParams from "../services/eventsCollection/selectors/selectScheduleParams.js";
+import SelectSubscribeNewsletterParams from "../services/eventsCollection/selectors/selectSubscribeNewsletterParams.js";
 const router = new Router({
    prefix: "/contact"
 });
@@ -50,8 +51,8 @@ router.post("/contactus", authMiddleware, async (ctx, next) => {
    const {
       error,
       value
-   } = contactContactusSchema.validate({
-      ...ctx.request.body,
+   } = contactSchema.validate({
+      ...getBody(ctx.request.body),
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
    if (error) {
@@ -119,8 +120,8 @@ router.post("/schedule", authMiddleware, async (ctx, next) => {
    const {
       error,
       value
-   } = contactScheduleSchema.validate({
-      ...ctx.request.body,
+   } = scheduleSchema.validate({
+      ...getBody(ctx.request.body),
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
    if (error) {
@@ -147,8 +148,8 @@ router.post("/schedule/estimate", authMiddleware, async ctx => {
    const {
       error,
       value
-   } = contactScheduleEstimateSchema.validate({
-      ...ctx.request.body,
+   } = scheduleEstimateSchema.validate({
+      ...getBody(ctx.request.body),
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
    if (error) {
@@ -199,8 +200,8 @@ router.post("/requestinfo", authMiddleware, async (ctx, next) => {
    const {
       error,
       value
-   } = contactRequestInfoSchema.validate({
-      ...ctx.request.body,
+   } = requestInfoSchema.validate({
+      ...getBody(ctx.request.body),
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
    if (error) {
@@ -221,5 +222,27 @@ router.post("/requestinfo", authMiddleware, async (ctx, next) => {
       }
    });
    return requestInfoCollector(ctx, next);
+});
+router.post("/subscribe/newsletter", authMiddleware, async (ctx, next) => {
+   ctx.state['enable.xff'] = true;
+   const {
+      error
+   } = subscribeNewsletterSchema.validate(getBody(ctx.request.body));
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   ctx.body = "OK";
+   next();
+}, (ctx, next) => {
+   const eventsCollectionMiddleware = ctx.state.container.resolve<EventsCollectionMiddleware>("middleware.eventsCollection");
+   const selectSubscribeNewsletterParams = ctx.state.container.resolve(SelectSubscribeNewsletterParams);
+   const subscribeNewsletterCollector = eventsCollectionMiddleware({
+      selector: selectSubscribeNewsletterParams.select,
+      options: {
+         allowIncognito: true
+      }
+   });
+   return subscribeNewsletterCollector(ctx, next);
 });
 export default router;

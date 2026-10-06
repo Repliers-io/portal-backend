@@ -4,8 +4,14 @@ export class DummyXFFProvider {
    isEnabled() {
       return false;
    }
+   skipReason() {
+      return 'no-request-context' as const;
+   }
    getHeader() {
       return '';
+   }
+   isSsg() {
+      return false;
    }
 }
 export default {

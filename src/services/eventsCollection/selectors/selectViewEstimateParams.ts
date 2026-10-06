@@ -3,6 +3,7 @@ import _debug from "debug";
 import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
 import { maybeRole } from "../../../lib/utils.js";
 import { UserRole } from "../../../constants.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectViewEstimateParams");
 @injectable()
 export default class SelectViewEstimateParams extends BaseEventCollectionSelector {
@@ -27,14 +28,15 @@ export default class SelectViewEstimateParams extends BaseEventCollectionSelecto
          const estimateUrl = this.getEstimateUrl(ctx.response.body);
          debug("Generating FUB params for estimate %s", estimateUrl);
          debug("Using Events Collection defaults: %O", defaults);
-         return {
+         const payload = {
             ...defaults,
             person: {
                ...defaults.person
             },
             type: "Visited Website - Estimate",
             description: estimateUrl ? `Estimate: ${estimateUrl}` : undefined
-         };
+         } as BossEventsCreateRequest;
+         return payload;
       } catch (error) {
          debug("Fail to generate FUB params due to error %O", error);
          return null;

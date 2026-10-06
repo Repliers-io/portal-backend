@@ -16,19 +16,12 @@ export default class AdminService {
          status: true
       });
       const agents = [];
-      for (const user of bossUsers.users) {
-         const agent = repliersAgents.agents.filter(agent => (agent.email.toLowerCase() === user.email.toLowerCase() || agent.phone === user.phone) && agent.email !== null && agent.phone !== null);
-         if (agent) {
-            agents.push({
-               ...user,
-               repliers: agent
-            });
-         } else {
-            agents.push({
-               ...user,
-               repliers: []
-            });
-         }
+      for (const user of bossUsers.users ?? []) {
+         const matches = repliersAgents.agents.filter(agent => !!agent.email && !!agent.phone && (agent.email.toLowerCase() === user.email?.toLowerCase() || agent.phone === user.phone));
+         agents.push({
+            ...user,
+            repliers: matches
+         });
       }
       const response = {
          ..._.pick(bossUsers._metadata, ['offset', 'limit', 'total']),

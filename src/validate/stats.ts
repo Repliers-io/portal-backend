@@ -1,10 +1,10 @@
 import joi from "joi";
 import { RplClass } from "../types/repliers.js";
-import { rplClassSchema } from "./common.js";
+import { rplClassSchema, rplMapFlexibleSchema } from "./common.js";
 import communities from "../services/stats/communities.js";
 import config from "../config.js";
 export const statsWidgetsSchema = joi.object<StatsWidgetsDto>().keys({
-   map: joi.alternatives(joi.array().items(joi.array().items(joi.array().length(2).items(joi.number()))), joi.string()),
+   map: rplMapFlexibleSchema,
    class: joi.alternatives(joi.array().items(joi.string().valid(...Object.values(RplClass)).required()).single(), joi.string().custom((value, helpers) => {
       if (value === "all") {
          return [RplClass.condo, RplClass.residential];

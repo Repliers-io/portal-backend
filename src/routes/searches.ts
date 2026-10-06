@@ -6,6 +6,7 @@ import SearchesService from "../services/searches.js";
 import { searchesCreateSchema, searchesDeleteSchema, searchesGetSchema, searchesUpdateSchema, searchsFilterSchema } from "../validate/searches.js";
 import type { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
 import SelectSaveSearchParams from "../services/eventsCollection/selectors/selectSaveSearchParams.js";
+import { getBody } from "../lib/utils.js";
 const router = new Router({
    prefix: "/searches"
 });
@@ -40,7 +41,7 @@ router.post("/", authMiddleware, async (ctx, next) => {
       error,
       value
    } = searchesCreateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.state["user"].sub
    });
    if (error) {
@@ -91,7 +92,7 @@ router.patch("/:searchId", authMiddleware, async ctx => {
       error,
       value
    } = searchesUpdateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       searchId: ctx.params["searchId"],
       clientId: ctx.state["user"].sub
    });

@@ -16,6 +16,7 @@ import SelectAgentClientRegistrationParams from "../services/eventsCollection/se
 import SelectAgentEstimateParams from "../services/eventsCollection/selectors/selectAgentEstimateParams.js";
 import _ from "lodash";
 import SelectEstimateNoteParams from "../services/eventsCollection/selectors/selectEstimateNoteParams.js";
+import { getBody } from "../lib/utils.js";
 const router = new Router({
    prefix: "/agent"
 });
@@ -123,6 +124,7 @@ router.param("estimateId", async (estimateId, ctx: Context, next: Next) => {
    const estimate = await estimateService.get({
       estimateId: +estimateId
    });
+   ctx.assert(estimate.clientId, 403, "You are not allowed to access this estimate"); // guest estimate has no owner
    const [hasValidSignature, borrowedAgentId] = await agentService.checkSignature(estimate.clientId.toString(), ctx.query['s']);
    ctx.assert(hasValidSignature, 403, "Invalid signature");
    if (borrowedAgentId) {
@@ -201,7 +203,7 @@ router.post("/client", async (ctx, next) => {
       error,
       value
    } = agentsCreateClientSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       status: true,
       agentId: ctx.state["user"].sub
    });
@@ -401,7 +403,7 @@ router.patch('/client/:clientId', async ctx => {
       error,
       value
    } = agentUpdateClientSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.params["clientId"],
       agentId: ctx.state["user"].sub
    });
@@ -454,7 +456,7 @@ router.post("/estimate/:clientId", async (ctx, next) => {
       error,
       value
    } = agentsCreateEstimateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.params["clientId"],
       agentId: ctx.state["user"].sub
    });
@@ -601,8 +603,10 @@ router.post("/estimate/:estimateId/send", async (ctx, next) => {
       const userService = ctx.state.container.resolve(UserService);
       const bossService = ctx.state.container.resolve(BossService);
       const baseEventCollectionSelector = ctx.state.container.resolve(BaseEventCollectionSelector);
-      const clientId = estimate.clientId;
-      const client = await userService.info(clientId);
+      if (!estimate.clientId) return;
+      const client = await userService.info(estimate.clientId);
+      if (!client.externalId && !client.email) return; // axios drops undefined params: getPeople({ email: undefined }) would match everyone
+
       const personSearchParams = client.externalId ? {
          id: client.externalId
       } : {
@@ -638,7 +642,7 @@ router.patch("/estimate/:estimateId", async ctx => {
       error,
       value
    } = agentsUpdateEstimateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       estimateId: ctx.params["estimateId"],
       agentId: ctx.state["user"].sub
    });
@@ -800,7 +804,7 @@ router.post("/messages/:clientId", async ctx => {
       error,
       value
    } = agentsCreateMessageSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: ctx.params["clientId"],
       agentId: ctx.state["user"].sub
    });

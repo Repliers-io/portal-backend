@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { AppConfig } from "config.js";
 import { instanceCachingFactory } from "tsyringe";
 import path from "node:path";
+import { type AppConfig } from "../../../config.js";
 const __dirname = import.meta.dirname;
 export default {
    token: "middleware.jwt.config.keys",

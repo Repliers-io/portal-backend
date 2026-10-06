@@ -8,10 +8,9 @@ export default {
    useFactory: instanceCachingFactory((container: DependencyContainer): Middleware => {
       const config = container.resolve<AppConfig>("config");
       return async (ctx, next) => {
-         // @ts-ignore
-         const context = ctx.req.body[Symbol.for("unparsedBody")];
+         const context = ctx.req.rawBody;
          const signature = ctx.get("fub-signature");
-         if (isFromFollowUpBoss(context, signature, config.boss.system_key)) {
+         if (context && isFromFollowUpBoss(context, signature, config.boss.system_key)) {
             return next();
          }
          throw new ApiError("Invalid signature", 401);

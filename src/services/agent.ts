@@ -94,7 +94,7 @@ export default class AgentService {
       const bossPeople = await this.boss.getPeople({
          ...params
       });
-      if (bossPeople.people.length === 0) {
+      if (!bossPeople.people?.length) {
          return {
             synced: 0
          };

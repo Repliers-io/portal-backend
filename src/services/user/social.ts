@@ -1,4 +1,3 @@
-import { IncomingMessage } from "http";
 import { container, injectable } from "tsyringe";
 import { SocialRepository } from "../../repository/social.js";
 import { SocialProvider } from "../../constants.js";
@@ -16,9 +15,11 @@ export default class SocialService {
       const providerInstance = this.socialProviders[provider];
       return providerInstance.getUrl();
    }
-   async callback(req: IncomingMessage, params: UserSocialCallbackDto) {
+   async callback(params: UserSocialCallbackDto) {
       const providerInstance = this.socialProviders[params.provider];
-      const tokens = await providerInstance.callback(req);
+      const tokens = await providerInstance.callback({
+         code: params.code
+      });
       await this.socialRepository.createTokens(params.email, params.provider, tokens);
       return tokens;
    }

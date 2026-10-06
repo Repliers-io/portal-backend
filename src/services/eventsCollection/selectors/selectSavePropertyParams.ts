@@ -2,6 +2,8 @@ import { injectable } from "tsyringe";
 import _debug from "debug";
 import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
 import { favoritesCreateSchema } from "../../../validate/favorites.js";
+import { getBody } from "../../../lib/utils.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:selectSavePropertyParams");
 @injectable()
 export default class SelectSavePropertyParams extends BaseEventCollectionSelector {
@@ -10,7 +12,7 @@ export default class SelectSavePropertyParams extends BaseEventCollectionSelecto
          error,
          value
       } = favoritesCreateSchema.validate({
-         ...ctx.request.body,
+         ...getBody(ctx.request.body),
          clientId: ctx.state["user"]?.sub
       });
       if (error) {
@@ -23,12 +25,13 @@ export default class SelectSavePropertyParams extends BaseEventCollectionSelecto
       } = value;
       const pageUrl = this.buildPropertyUrl(mlsNumber, boardId);
       const defaults = await this.getDefaults(ctx);
-      return {
+      const payload = {
          ...defaults,
          type: 'Saved Property',
          pageUrl,
          pageReferrer: defaults.pageReferrer || pageUrl,
          property: await this.getProperty(mlsNumber, boardId)
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
 }

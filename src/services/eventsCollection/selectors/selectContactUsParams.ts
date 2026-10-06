@@ -1,8 +1,9 @@
 import { injectable } from "tsyringe";
 import _debug from "debug";
-import { maybeClientId } from "../../../lib/utils.js";
-import { contactContactusSchema } from "../../../validate/contact.js";
-import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { getBody, maybeClientId } from "../../../lib/utils.js";
+import { contactSchema } from "../../../validate/contact.js";
+import BaseEventCollectionSelector, { contactEntries, EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectContactUsParams");
 @injectable()
 export default class SelectContactUsParams extends BaseEventCollectionSelector {
@@ -10,8 +11,8 @@ export default class SelectContactUsParams extends BaseEventCollectionSelector {
       const {
          error,
          value
-      } = contactContactusSchema.validate({
-         ...ctx.request.body,
+      } = contactSchema.validate({
+         ...getBody(ctx.request.body),
          clientId: maybeClientId(ctx.state?.["user"]?.sub)
       });
       if (error) {
@@ -19,21 +20,17 @@ export default class SelectContactUsParams extends BaseEventCollectionSelector {
          return null;
       }
       const defaults = await this.getDefaults(ctx);
-      return {
+      const payload = {
          ...defaults,
          person: {
             firstName: value.name,
-            emails: [{
-               value: value.email,
-               type: 'main'
-            }],
-            phones: [{
-               value: value.phone,
-               type: 'main'
-            }]
+            ...contactEntries(value.email, value.phone),
+            tags: value.tags?.length ? value.tags : undefined
          },
          message: value.message,
-         type: 'General Inquiry'
-      };
+         type: 'General Inquiry',
+         pageUrl: value.pageUrl ?? ctx.request.headers.referer
+      } as BossEventsCreateRequest;
+      return payload;
    };
 }

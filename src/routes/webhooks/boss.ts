@@ -1,11 +1,13 @@
-import Router, { Middleware } from "@koa/router";
+import Router from "@koa/router";
 import { container } from "tsyringe";
 import { bossWebhooksEventSchema } from "../../validate/webhooks.js";
 import { ApiError } from "../../lib/errors.js";
 import BossWebhooksService from "../../services/boss/webhook.js";
 import { Logger } from "pino";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { IAsyncLocalStore } from "providers/middleware/logger.js";
+import { IAsyncLocalStore } from "../../providers/middleware/logger.js";
+import { getBody } from "../../lib/utils.js";
+import { Middleware } from "koa";
 const router = new Router({
    prefix: "/boss"
 });
@@ -15,7 +17,7 @@ router.post('/people', bossAuthorizer, async ctx => {
       error,
       value
    } = bossWebhooksEventSchema.validate({
-      ...ctx.request.body
+      ...getBody(ctx.request.body)
    });
    if (error) {
       ctx.throw(new ApiError(error.message, 400));

@@ -14,10 +14,10 @@ export default {
          customReceivedMessage: (req: IncomingMessage) => {
             return `Request: ${req.method} ${req.url}`;
          },
-         customSuccessMessage: (res: ServerResponse<IncomingMessage>) => {
-            return `Response: ${res.req.method} ${res.req.url} ${res.statusCode}`;
+         customSuccessMessage: (_req: IncomingMessage, res: ServerResponse<IncomingMessage>, responseTime: number) => {
+            return `Response: ${res.statusCode} ${responseTime}ms ${res.req.method} ${res.req.url}`;
          },
-         reqCustomProps: () => {
+         customProps: () => {
             const asyncLocalStore = container.resolve<AsyncLocalStorage<IAsyncLocalStore>>('async_local_store');
             const localStore = asyncLocalStore.getStore();
             if (!localStore) {

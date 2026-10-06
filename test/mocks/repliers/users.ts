@@ -66,6 +66,18 @@ export const mockUserFind = (user: UserMock) => nock(config.repliers.base_url).g
       ...user
    }]
 });
+export const mockUserFindSimple = (user: UserMock) => nock(config.repliers.base_url).get("/clients") // lookup for user tosend otp
+.query({
+   email: user.email
+}).reply(200, {
+   page: 1,
+   numPages: 1,
+   pageSize: 10,
+   count: 1,
+   clients: [{
+      ...user
+   }]
+});
 export const mockUserNotFound = (user: UserMock) => nock(config.repliers.base_url).get("/clients") // lookup for user tosend otp
 .query({
    email: user.email,

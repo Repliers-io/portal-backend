@@ -2,10 +2,10 @@ import { injectable } from "tsyringe";
 import _debug from "debug";
 import { agentsCreateClientSchema } from "../../../validate/agent.js";
 import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
-import { RplClientsClient } from "services/repliers/clients.js";
+import { RplClientsClient } from "../../../services/repliers/clients.js";
 import { Context } from "koa";
-import { CustomPeopleFields } from "services/boss.js";
-import { secureFubAvmLink } from "../../../lib/utils.js";
+import { BossEventsCreateRequest, CustomPeopleFields } from "../../../services/boss.js";
+import { getBody, secureFubAvmLink } from "../../../lib/utils.js";
 const debug = _debug("repliers:services:SelectAgentClientRegistrationParams");
 @injectable()
 export default class SelectAgentClientRegistrationParams extends BaseEventCollectionSelector {
@@ -14,7 +14,7 @@ export default class SelectAgentClientRegistrationParams extends BaseEventCollec
          error,
          value
       } = agentsCreateClientSchema.validate({
-         ...ctx.request.body,
+         ...getBody(ctx.request.body),
          status: true,
          agentId: ctx.state["user"].sub
       });
@@ -24,7 +24,7 @@ export default class SelectAgentClientRegistrationParams extends BaseEventCollec
       }
       const defaults = await this.getDefaults(ctx);
       const agentProps = await this.getAgent(value.agentId);
-      return {
+      const payload = {
          ...defaults,
          person: {
             ...this.envSpecificPersonFields(ctx),
@@ -43,7 +43,8 @@ export default class SelectAgentClientRegistrationParams extends BaseEventCollec
          },
          type: "Registration",
          status: true
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
    envSpecificPersonFields(ctx: Context): CustomPeopleFields {
       const defaultFields = {

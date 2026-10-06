@@ -1,5 +1,5 @@
 import { container } from "tsyringe";
-import { AppConfig } from "../../src/config.js";
+import type { AppConfig } from "../../src/config.js";
 import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 export const generateAuthToken = (payload: JwtPayload) => {
    const config = container.resolve<AppConfig>('config');

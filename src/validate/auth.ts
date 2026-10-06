@@ -43,3 +43,17 @@ export interface AuthEmbedDto {
    context: string;
    signature: string;
 }
+export const providerUrlSchema = joi.object<ProviderUrlDto>().keys({
+   redirect_uri: joi.string().uri().optional()
+});
+export interface ProviderUrlDto {
+   redirect_uri?: string;
+}
+export interface ProviderCallbackDto {
+   code: string;
+   redirect_uri?: string;
+}
+export const providerCallbackSchema = joi.object<ProviderCallbackDto>().keys({
+   code: joi.string().required(),
+   redirect_uri: joi.string().uri().optional()
+});

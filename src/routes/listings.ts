@@ -2,14 +2,17 @@ import Router from "@koa/router";
 import { container } from "tsyringe";
 import ListingsService from "../services/listings.js";
 import { Middleware } from "koa-jwt";
-import { listingCountSchema, listingSearchSchema, listingSimilarSchema, listingsLocationsSchema, listingsSingleSchema, nlpSchema } from "../validate/listings.js";
+import { listingCountArraySchema, listingCountSchema, listingSearchSchema, listingSimilarSchema, listingsHistorySchema, listingsLocationsSchema, listingsSingleSchema, listingsFeaturedSchema, nlpSchema } from "../validate/listings.js";
+import FavoritesService from "../services/favorites.ts";
 import { ApiError } from "../lib/errors.js";
+import { sendCached } from "../lib/decorators/cached.js";
 import { type AppConfig } from "../config.js";
 import _debug from "debug";
 import type { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
 import SelectViewPropertyParams from "../services/eventsCollection/selectors/selectViewPropertyParams.js";
 import { RplClass } from "../types/repliers.js";
 import { UserRole } from "../constants.js";
+import { getBody } from "../lib/utils.js";
 const debug = _debug("repliers:routes:listings");
 const router = new Router({
    prefix: "/listings"
@@ -35,6 +38,13 @@ const config = container.resolve<AppConfig>("config");
  *                type: string
  *           description: Filters listings by agent name or agent ID, for example, John Doe. Supports multiple values
  *         - in: query
+ *           name: agentId
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filters listings by agent ID. Supports multiple values
+ *         - in: query
  *           name: aggregates
  *           explode: false
  *           schema:
@@ -43,6 +53,30 @@ const config = container.resolve<AppConfig>("config");
  *                type: string
  *                enum: [class, status, lastStatus, type, address.area, address.city, address.neighborhood, details.propertyType, details.style, detail.numBedrooms, details.numBathrooms,permissions.displayPublic,details.businessType,details.businessSubType,details.basement1,details.basement2, details.garage,details.den,details.sewer,details.waterSource,details.heating,details.swimmingPool,details.yearBuilt,details.exteriorConstruction,details.sqft,details.balcony,condominium.locker,details.driveway,map, address.zip]
  *           description: Aggregates listing counts in the response by specified fields.
+ *         - in: query
+ *           name: aggregatesListPriceSaleBucketSize
+ *           schema:
+ *             type: integer
+ *           description: Width of a listPrice sale bucket, in dollars. Only valid when "listPrice" is in aggregates. Repliers defaults to 100000.
+ *         - in: query
+ *           name: aggregatesListPriceLeaseBucketSize
+ *           schema:
+ *             type: integer
+ *           description: Width of a listPrice lease bucket, in dollars. Only valid when "listPrice" is in aggregates. Repliers defaults to 500.
+ *         - in: query
+ *           name: aggregatesUnique
+ *           explode: false
+ *           schema:
+ *              type: array
+ *              items:
+ *                type: string
+ *                enum: [class, status, lastStatus, type, address.area, address.city, address.neighborhood, details.propertyType, details.style, detail.numBedrooms, details.numBathrooms,permissions.displayPublic,details.businessType,details.businessSubType,details.basement1,details.basement2, details.garage,details.den,details.sewer,details.waterSource,details.heating,details.swimmingPool,details.yearBuilt,details.exteriorConstruction,details.sqft,details.balcony,condominium.locker,details.driveway,map, address.zip]
+ *           description: Returns unique values for specified fields.
+ *         - in: query
+ *           name: aggregateStatistics
+ *           schema:
+ *             type: boolean
+ *           description: Include aggregate statistics in the response
  *         - in: query
  *           name: amenities
  *           schema:
@@ -53,7 +87,9 @@ const config = container.resolve<AppConfig>("config");
  *         - in: query
  *           name: area
  *           schema:
- *             type: string
+ *             type: array
+ *             items:
+ *                type: string
  *           description: Filter by the geographical area of the listing (also referred to as region)
  *         - in: query
  *           name: balcony
@@ -62,6 +98,20 @@ const config = container.resolve<AppConfig>("config");
  *             items:
  *                type: string
  *           description: Filters listings by one or more values for balcony.
+ *         - in: query
+ *           name: bathroomQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filters listings by bathroom quality
+ *         - in: query
+ *           name: bedroomQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filters listings by bedroom quality
  *         - in: query
  *           name: basement
  *           schema:
@@ -78,10 +128,19 @@ const config = container.resolve<AppConfig>("config");
  *                format: int32
  *           description: Filter by boardId. This is only required if your account has access to more than one MLS. You may specify one or more board IDs to filter by, if not specified, returns all boards that that account has access to be default.
  *         - in: query
+ *           name: boardAgentId
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filters listings by board agent ID. Supports multiple values
+ *         - in: query
  *           name: brokerage
  *           schema:
- *             type: string
- *           description: Filter results by brokerage name
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter results by brokerage name. Supports multiple values
  *         - in: query
  *           name: businessSubType
  *           schema:
@@ -110,6 +169,11 @@ const config = container.resolve<AppConfig>("config");
  *                enum: [condo, residential, commercial]
  *           description: The class of listing to filter the search results by.
  *         - in: query
+ *           name: cluster
+ *           schema:
+ *             type: boolean
+ *           description: Enable clustering of listings
+ *         - in: query
  *           name: clusterFields
  *           schema:
  *             type: string
@@ -131,10 +195,32 @@ const config = container.resolve<AppConfig>("config");
  *             maximum: 29
  *           description: Use this parameter to adjust the granularity of map clusters. A lower value aggregates listings into less clusters, a higher value aggregates listings into more clusters. This parameter can only be used if "map" is specified in aggregates.
  *         - in: query
+ *           name: clusterStatistics
+ *           schema:
+ *             type: boolean
+ *           description: Include statistics in cluster results
+ *         - in: query
+ *           name: cooling
+ *           schema:
+ *             type: string
+ *           description: Filter listings by cooling type
+ *         - in: query
+ *           name: coverImage
+ *           schema:
+ *             type: string
+ *           description: Specify cover image preference
+ *         - in: query
  *           name: den
  *           schema:
  *             type: string
  *           description: Filter listings by den description.
+ *         - in: query
+ *           name: diningRoomQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by dining room quality
  *         - in: query
  *           name: displayAddressOnInternet
  *           schema:
@@ -175,6 +261,13 @@ const config = container.resolve<AppConfig>("config");
  *             type: string
  *           description: "Use if you want to limit the response to containing certain fields only. For example: fields?listPrice,soldPrice would limit the response to contain listPrice and soldPrice only. You can also specify the amount of images to return, for example if a listing has 40 images total and you specify fields=images[5] it will only return the first 5 images."
  *         - in: query
+ *           name: frontOfStructureQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by front of structure quality
+ *         - in: query
  *           name: garage
  *           schema:
  *             type: array
@@ -199,6 +292,19 @@ const config = container.resolve<AppConfig>("config");
  *                type: string
  *           description: Filters listings by one or more values for heating.
  *         - in: query
+ *           name: imagesOrder
+ *           schema:
+ *             type: string
+ *             enum: [score, original]
+ *           description: Order of images in an AI search (imageSearchItems or coverImage). "score" (Repliers default) moves the matched image first; "original" keeps the MLS order. imagesScore is aligned with the returned order either way. Repliers rejects it (400) without imageSearchItems or coverImage.
+ *         - in: query
+ *           name: kitchenQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by kitchen quality
+ *         - in: query
  *           name: lastStatus
  *           schema:
  *             $ref: '#/components/schemas/RplLastStatus'
@@ -220,6 +326,20 @@ const config = container.resolve<AppConfig>("config");
  *             type: boolean
  *           description: If false, the listings object will be empty. Useful for speeding up responses when statistics and aggregates are requested and listings are not needed.
  *         - in: query
+ *           name: livingRoomQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by living room quality
+ *         - in: query
+ *           name: locationId
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filters listings by one or more values for locationId.
+ *         - in: query
  *           name: locker
  *           schema:
  *             type: array
@@ -235,27 +355,30 @@ const config = container.resolve<AppConfig>("config");
  *         - in: query
  *           name: map
  *           schema:
- *             type: string
- *             format: json
- *           description: |
- *              An array of polygons arrays with arrays of longitude/latitude shapes to be used as a filter for listing results.
- *
- *              Example:
- *              ```json [[
- *              [-79.14121,43.79041],[-79.132627,43.773059],[-79.188932,43.886988],[-79.200605,43.877832],[-79.236654,43.869665],[-79.265836,43.860011],[-79.281972,43.856051],
- *              [-79.322828,43.84689],[-79.368146,43.839214],[-79.386021,43.836139],[-79.41486,43.838616],[-79.423787,43.836635],[-79.475285,43.82227],[-79.480092,43.813352],
- *              [-79.480778,43.803441],[-79.485585,43.79799],[-79.493825,43.794025],[-79.556996,43.779649],[-79.601628,43.761303],[-79.61611,43.758572],[-79.629934,43.750141],
- *              [-79.625471,43.728064],[-79.616888,43.713177],[-79.606245,43.695555],[-79.601095,43.685873],[-79.593885,43.681156],[-79.590109,43.672465],[-79.582212,43.671224],
- *              [-79.574659,43.670975],[-79.535177,43.58325],[-79.424627,43.619052],[-79.385488,43.602645],[-79.315451,43.612092],[-79.14121,43.79041]
- *              ]]
- *              ```
+ *             $ref: '#/components/schemas/RplMapFlexible'
+ *           description: Polygon coordinates for map filtering (alternative to request body)
+ *         - in: query
+ *           name: mapOperator
+ *           schema:
+ *             $ref: '#/components/schemas/RplOperator'
+ *           description: Operator for map filtering
  *         - in: query
  *           name: maxBaths
  *           schema:
  *             type: number
  *             format: int32
  *         - in: query
+ *           name: maxBathrooms
+ *           schema:
+ *             type: number
+ *             format: int32
+ *         - in: query
  *           name: maxBeds
+ *           schema:
+ *             type: number
+ *             format: int32
+ *         - in: query
+ *           name: maxBedrooms
  *           schema:
  *             type: number
  *             format: int32
@@ -292,6 +415,16 @@ const config = container.resolve<AppConfig>("config");
  *             type: number
  *             format: int32
  *         - in: query
+ *           name: maxQuality
+ *           schema:
+ *             type: number
+ *           description: Maximum quality rating filter
+ *         - in: query
+ *           name: maxRepliersUpdatedOn
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings updated on Repliers on or before this date
+ *         - in: query
  *           name: maxSoldDate
  *           schema:
  *             $ref: '#/components/schemas/RplDate'
@@ -308,6 +441,12 @@ const config = container.resolve<AppConfig>("config");
  *             type: number
  *             format: int32
  *           description: Filter listings whose square footage is <= the supplied value. Note - excludes listings where the sqft value is not supplied by the MLS.
+ *         - in: query
+ *           name: maxTaxes
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose taxes are <= the supplied value
  *         - in: query
  *           name: maxUnavailableDate
  *           schema:
@@ -330,7 +469,17 @@ const config = container.resolve<AppConfig>("config");
  *             type: number
  *             format: int32
  *         - in: query
+ *           name: minBathrooms
+ *           schema:
+ *             type: number
+ *             format: int32
+ *         - in: query
  *           name: minBeds
+ *           schema:
+ *             type: number
+ *             format: int32
+ *         - in: query
+ *           name: minBedrooms
  *           schema:
  *             type: number
  *             format: int32
@@ -371,6 +520,16 @@ const config = container.resolve<AppConfig>("config");
  *           schema:
  *             type: number
  *             format: int32
+ *         - in: query
+ *           name: minQuality
+ *           schema:
+ *             type: number
+ *           description: Minimum quality rating filter
+ *         - in: query
+ *           name: minRepliersUpdatedOn
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings updated on Repliers on or after this date
  *         - in: query
  *           name: minSoldDate
  *           schema:
@@ -427,8 +586,15 @@ const config = container.resolve<AppConfig>("config");
  *         - in: query
  *           name: operator
  *           schema:
- *             $ref: '#/components/schemas/RplOperator'
- *           description: If set to "AND", listings must match all supplied parameters. If set to "OR", listings must match at least 1 parameter.
+ *             $ref: '#/components/schemas/RplOperatorExtended'
+ *           description: Logical operator across filter fields (case-insensitive). Use "AND"/"OR" to apply to all fields, or "AND:<fieldName>"/"OR:<fieldName>" to scope to a single field. Accepts either a single value or an array.
+ *         - in: query
+ *           name: overallQuality
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by overall quality rating
  *         - in: query
  *           name: pageNum
  *           schema:
@@ -496,17 +662,23 @@ const config = container.resolve<AppConfig>("config");
  *         - in: query
  *           name: streetDirection
  *           schema:
- *             type: string
+ *             type: array
+ *             items:
+ *                type: string
  *           description: Filter by the street direction of the listing, for example "W"
  *         - in: query
  *           name: streetName
  *           schema:
- *             type: string
+ *             type: array
+ *             items:
+ *                type: string
  *           description: Filter by the street name of the listing (excluding the street suffix and direction, for example "Yonge")
  *         - in: query
  *           name: streetNumber
  *           schema:
- *             type: string
+ *             type: array
+ *             items:
+ *                type: string
  *           description: Filter by the street number of the listing.
  *         - in: query
  *           name: style
@@ -533,6 +705,23 @@ const config = container.resolve<AppConfig>("config");
  *             type: string
  *           description: Filter by the unit number of the listing.
  *         - in: query
+ *           name: repliersUpdatedOn
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings by when they were last updated on Repliers
+ *         - in: query
+ *           name: state
+ *           schema:
+ *             type: string
+ *           description: Filter by state/province
+ *         - in: query
+ *           name: streetSuffix
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter by the street suffix of the listing (e.g., St, Ave, Rd)
+ *         - in: query
  *           name: updatedOn
  *           schema:
  *             $ref: '#/components/schemas/RplDate'
@@ -544,6 +733,11 @@ const config = container.resolve<AppConfig>("config");
  *             items:
  *                type: string
  *           description: Filter listings by one or more values for waterSource.
+ *         - in: query
+ *           name: waterfront
+ *           schema:
+ *             $ref: '#/components/schemas/RplYesNo'
+ *           description: Filter listings by waterfront status
  *         - in: query
  *           name: sewer
  *           schema:
@@ -568,6 +762,226 @@ const config = container.resolve<AppConfig>("config");
  *           schema:
  *             type: string
  *           description: Filter listings by zoning description.
+ *         - in: query
+ *           name: activeMaxListDate
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter active listings listed on or before the supplied date.
+ *         - in: query
+ *           name: activeMinListDate
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter active listings listed on or after the supplied date.
+ *         - in: query
+ *           name: createdOn
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings by the date they were first created in Repliers.
+ *         - in: query
+ *           name: maxPriceChangeDateTime
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings whose last price change occurred on or before the supplied value.
+ *         - in: query
+ *           name: minPriceChangeDateTime
+ *           schema:
+ *             $ref: '#/components/schemas/RplDate'
+ *           description: Filter listings whose last price change occurred on or after the supplied value.
+ *         - in: query
+ *           name: addressKey
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by one or more address keys.
+ *         - in: query
+ *           name: areaOrCity
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter by area or city — matches either field.
+ *         - in: query
+ *           name: cityOrDistrict
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter by city or district — matches either field.
+ *         - in: query
+ *           name: maxStreetNumber
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings whose street number is <= the supplied value.
+ *         - in: query
+ *           name: minStreetNumber
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings whose street number is >= the supplied value.
+ *         - in: query
+ *           name: parkingType
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by one or more parking types.
+ *         - in: query
+ *           name: propertySubType
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by one or more property sub-types.
+ *         - in: query
+ *           name: propertyTypeOrStyle
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter by property type or style — matches either field.
+ *         - in: query
+ *           name: openHouseStatus
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by open-house status.
+ *         - in: query
+ *           name: openHouseType
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *           description: Filter listings by open-house type.
+ *         - in: query
+ *           name: fuzzySearch
+ *           schema:
+ *             type: boolean
+ *           description: Enable fuzzy matching on keyword search.
+ *         - in: query
+ *           name: searchOperator
+ *           schema:
+ *             type: string
+ *           description: Logical operator applied to the keyword search ("AND" / "OR").
+ *         - in: query
+ *           name: amenitiesOperator
+ *           schema:
+ *             type: string
+ *           description: Logical operator applied to the amenities filter ("AND" / "OR").
+ *         - in: query
+ *           name: maxBedroomsPlus
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose plus-bedrooms count is <= the supplied value.
+ *         - in: query
+ *           name: minBedroomsPlus
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose plus-bedrooms count is >= the supplied value.
+ *         - in: query
+ *           name: maxBedroomsTotal
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose total bedroom count (incl. plus) is <= the supplied value.
+ *         - in: query
+ *           name: minBedroomsTotal
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose total bedroom count (incl. plus) is >= the supplied value.
+ *         - in: query
+ *           name: maxCoveredSpaces
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose covered parking spaces are <= the supplied value.
+ *         - in: query
+ *           name: minCoveredSpaces
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose covered parking spaces are >= the supplied value.
+ *         - in: query
+ *           name: maxParkingSpaces
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose parking spaces are <= the supplied value.
+ *         - in: query
+ *           name: maxLotSizeSqft
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose lot size (sqft) is <= the supplied value.
+ *         - in: query
+ *           name: minLotSizeSqft
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose lot size (sqft) is >= the supplied value.
+ *         - in: query
+ *           name: maxStories
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose number of stories is <= the supplied value.
+ *         - in: query
+ *           name: minStories
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose number of stories is >= the supplied value.
+ *         - in: query
+ *           name: maxDaysOnMarket
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose days on market is <= the supplied value.
+ *         - in: query
+ *           name: minDaysOnMarket
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose days on market is >= the supplied value.
+ *         - in: query
+ *           name: maxEstimate
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose estimated value is <= the supplied value.
+ *         - in: query
+ *           name: minEstimate
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Filter listings whose estimated value is >= the supplied value.
+ *         - in: query
+ *           name: clusterListingsThreshold
+ *           schema:
+ *             type: number
+ *             format: int32
+ *           description: Maximum listings per cluster before a cluster is split — only valid when "map" is in aggregates.
+ *         - in: query
+ *           name: lastPriceChangeType
+ *           schema:
+ *             type: string
+ *             enum: [decrease, increase]
+ *           description: Filter listings whose last price change was a decrease or an increase.
+ *         - in: query
+ *           name: standardStatus
+ *           schema:
+ *             type: array
+ *             items:
+ *                type: string
+ *                enum: [Active, "Active Under Contract", Canceled, Closed, "Coming Soon", Delete, Expired, Hold, Incomplete, Pending, Withdrawn]
+ *           description: Filter listings by RESO StandardStatus. Supports multiple values.
  *       requestBody:
  *          content:
  *             application/json:
@@ -585,6 +999,8 @@ const config = container.resolve<AppConfig>("config");
  *                schema:
  *                   type: object
  *                   properties:
+ *                      map:
+ *                         $ref: '#/components/schemas/RplMap'
  *                      imageSearchItems:
  *                         type: array
  *                         items:
@@ -697,12 +1113,31 @@ router.get("/count", authMiddleware, async ctx => {
       ctx.throw(new ApiError(error.message, 400));
       return;
    }
-   ctx.body = await listingsService.count(value);
+   const data = await listingsService.count(value);
+   sendCached(ctx, data);
+});
+router.post("/count", authMiddleware, async ctx => {
+   ctx.state['enable.xff'] = true;
+   const listingsService = ctx.state.container.resolve(ListingsService);
+   debug("POST /count body: %O", ctx.request.body);
+   const payload = [
+   // this is because koa-body didn't expect that body can be an array
+   ...(ctx.request.body as unknown as any[])];
+   const {
+      error,
+      value
+   } = listingCountArraySchema.validate(payload);
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const result = await listingsService.countArray(value);
+   ctx.body = result;
 });
 
 /**
 *  @openapi
-*     /api/listings/{propertyId}/similar:
+*     /api/listings/{mlsNumber}/similar:
 *        get:
 *           tags:
 *              - Listings
@@ -711,7 +1146,7 @@ router.get("/count", authMiddleware, async ctx => {
 *              - bearerAuth: []
 *           parameters:
 *              - in: path
-*                name:  propertyId
+*                name:  mlsNumber
 *                schema:
 *                    type: string
 *              - in: query
@@ -747,12 +1182,12 @@ router.get("/count", authMiddleware, async ctx => {
 *              401:
 *                 $ref: '#/components/responses/Unauthorized'
 */
-router.get("/:propertyId/similar", authMiddleware, async ctx => {
+router.get("/:mlsNumber/similar", authMiddleware, async ctx => {
    ctx.state['enable.xff'] = true;
    const listingsService = ctx.state.container.resolve(ListingsService);
    const payload = {
       ...ctx.request.query,
-      propertyId: ctx.params["propertyId"],
+      mlsNumber: ctx.params["mlsNumber"],
       app_state: {
          user: ctx.state["user"]
       }
@@ -812,6 +1247,9 @@ router.get("/:propertyId/similar", authMiddleware, async ctx => {
 *              401:
 *                 $ref: '#/components/responses/Unauthorized'
 */
+/**
+ * @deprecated This route is deprecated in favor of the GET /locations.
+ */
 router.get("/locations", authMiddleware, async ctx => {
    ctx.state['enable.xff'] = true;
    const dropCoordinates = ctx.request.query["dropCoordinates"] === undefined ? config.settings.locations.drop_coordinates : ctx.request.query["dropCoordinates"];
@@ -830,18 +1268,57 @@ router.get("/locations", authMiddleware, async ctx => {
    }
    const listingsService = ctx.state.container.resolve(ListingsService);
    const data = await listingsService.locations(value);
-   if ("expires" in data) {
-      ctx.set("Cache-Control", `private, max-age = ${data.expires}`);
-      ctx.body = data.result;
-   } else {
-      ctx.body = data;
-   }
+   sendCached(ctx, data);
 });
+
+/**
+*  @openapi
+*     /api/listings/nlp:
+*        post:
+*           tags:
+*              - Listings
+*           summary: Natural language property search
+*           security:
+*              - bearerAuth: []
+*           requestBody:
+*              required: true
+*              content:
+*                 application/json:
+*                    schema:
+*                       type: object
+*                       required:
+*                          - prompt
+*                       properties:
+*                          prompt:
+*                             type: string
+*                          nlpId:
+*                             type: string
+*                             format: uuid
+*                          nlpVersion:
+*                             type: string
+*                             maxLength: 10
+*                          statistics:
+*                             type: string
+*                          aggregates:
+*                             type: string
+*                             maxLength: 1024
+*           responses:
+*              200:
+*                 description: NLP search results
+*                 content:
+*                    application/json:
+*                       schema:
+*                          type: object
+*              400:
+*                 $ref: '#/components/responses/BadRequest'
+*              401:
+*                 $ref: '#/components/responses/Unauthorized'
+*/
 router.post('/nlp', authMiddleware, async ctx => {
    ctx.state['enable.xff'] = true;
    const payload = {
-      ...ctx.request.body,
-      state: {
+      ...getBody(ctx.request.body),
+      app_state: {
          user: ctx.state["user"]
       }
    };
@@ -855,6 +1332,125 @@ router.post('/nlp', authMiddleware, async ctx => {
    }
    const listingsService = ctx.state.container.resolve(ListingsService);
    ctx.body = await listingsService.nlp(value);
+});
+/**
+*  @openapi
+*     /api/listings/featured/{slug}:
+*        get:
+*           tags:
+*              - Listings
+*           summary: Get featured listings by slug
+*           security:
+*              - bearerAuth: []
+*           parameters:
+*              - in: path
+*                name: slug
+*                required: true
+*                schema:
+*                   type: string
+*                   pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+*              - in: query
+*                name: sortBy
+*                schema:
+*                   $ref: '#/components/schemas/RplSortBy'
+*                description: The attribute that the featured listings will be sorted by. Note, distanceAsc and distanceDesc must be used in combination with lat and long parameters.
+*              - in: query
+*                name: lat
+*                schema:
+*                   type: string
+*                description: Latitude used together with long to sort featured listings by distance.
+*              - in: query
+*                name: long
+*                schema:
+*                   type: string
+*                description: Longitude used together with lat to sort featured listings by distance.
+*           responses:
+*              200:
+*                 description: Featured listings
+*                 content:
+*                    application/json:
+*                       schema:
+*                          type: object
+*              400:
+*                 $ref: '#/components/responses/BadRequest'
+*              401:
+*                 $ref: '#/components/responses/Unauthorized'
+*/
+router.get('/featured/:slug', authMiddleware, async ctx => {
+   ctx.state['enable.xff'] = true;
+   const {
+      error,
+      value
+   } = listingsFeaturedSchema.validate({
+      ...ctx.request.query,
+      slug: ctx.params["slug"]
+   }, {
+      stripUnknown: true
+   });
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const favoritesService = ctx.state.container.resolve(FavoritesService);
+   const data = await favoritesService.featuredListings({
+      ...value,
+      app_state: {
+         user: ctx.state["user"]
+      }
+   });
+   sendCached(ctx, data);
+});
+
+/**
+*  @openapi
+*     /api/listings/history:
+*        get:
+*           tags:
+*              - Listings
+*           summary: Cross-board history of the property behind an MLS number
+*           security:
+*              - bearerAuth: []
+*           parameters:
+*              - in: query
+*                name: mlsNumber
+*                required: true
+*                schema:
+*                   $ref: '#/components/schemas/mlsNumber'
+*           responses:
+*              200:
+*                 description: Property history, newest first
+*                 content:
+*                    application/json:
+*                       schema:
+*                          type: object
+*                          properties:
+*                             history:
+*                                type: array
+*                                items:
+*                                   type: object
+*              400:
+*                 $ref: '#/components/responses/BadRequest'
+*/
+// Registered above `/:mlsNumber` — @koa/router matches in registration order, so the
+// parametric route would otherwise swallow this path.
+router.get("/history", authMiddleware, async ctx => {
+   ctx.state['enable.xff'] = true;
+   const listingsService = ctx.state.container.resolve(ListingsService);
+   const payload = {
+      ...ctx.request.query,
+      app_state: {
+         user: ctx.state["user"]
+      }
+   };
+   const {
+      error,
+      value
+   } = listingsHistorySchema.validate(payload);
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   ctx.body = await listingsService.history(value);
 });
 
 /**
@@ -883,6 +1479,31 @@ router.post('/nlp', authMiddleware, async ctx => {
 *                schema:
 *                   type: string
 *                   enum: [raw]
+*              - in: query
+*                name: dynamicComparables
+*                schema:
+*                   type: boolean
+*              - in: query
+*                name: locations
+*                description: If true, fetches locations whose boundary contains this listing's coordinates.
+*                schema:
+*                   type: boolean
+*              - in: query
+*                name: locationsSource
+*                description: Filters locations returned by `locations=true` by source.
+*                schema:
+*                   type: array
+*                   items:
+*                      type: string
+*                      enum: [MLS, UserDefined, LiveBy]
+*              - in: query
+*                name: locationsType
+*                description: Filters locations returned by `locations=true` by type.
+*                schema:
+*                   type: array
+*                   items:
+*                      type: string
+*                      enum: [area, city, city-alternate, neighborhood, neighborhood-alternate, postalCode, schoolDistrict, district, school]
 *           responses:
 *              200:
 *                 description:

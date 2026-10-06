@@ -1,21 +1,23 @@
 import { inject, injectable, container } from "tsyringe";
-import { AutosuggestAddressDto, AutosuggestDto, BaseAutosuggestDto } from "../validate/autosuggest.js";
+import type { AutosuggestAddressDto, AutosuggestDto, BaseAutosuggestDto } from "../validate/autosuggest.js";
 import MapboxService, { MapboxSuggestion } from "./mapbox.js";
-import RepliersService from "./repliers.js";
 import GoogleService from './google.js';
-import { RplClass, RplStatus, RplType, RplSortBy, RplYesNo } from "../types/repliers.js";
+import { RplClass, RplSortBy, RplYesNo } from "../types/repliers.js";
+import RepliersLocations from "./repliers/locations.js";
+import { addMlsSearchVariant, mlsNumberCandidate } from "./listings/mlsNumberPrefix.ts";
 import type { AppConfig } from "../config.js";
 import distance from "jaro-winkler";
 import addresser from "addresser";
 import _ from "lodash";
 import _debug from "debug";
+import ListingsService from "./listings.ts";
 const debug = _debug("repliers:services:autosuggest");
 const config = container.resolve<AppConfig>("config");
 const defaultSuffixMapKey = "Street";
 const defaultSuffixMapValue = "ST";
 @injectable()
 export default class AutosuggestService {
-   constructor(private mapboxService: MapboxService, private repliersService: RepliersService, private googleService: GoogleService, @inject("config")
+   constructor(private mapboxService: MapboxService, private googleService: GoogleService, private listingsService: ListingsService, private repliersLocations: RepliersLocations, @inject("config")
    private config: AppConfig) {}
    public async search(params: AutosuggestDto) {
       const jarohash: string[] = [];
@@ -53,7 +55,7 @@ export default class AutosuggestService {
          mapbox_id,
          feature_type,
          region: {
-            region_code: region.region_code
+            region_code: region?.region_code
          },
          postcode: {
             name: postcode?.name
@@ -65,29 +67,81 @@ export default class AutosuggestService {
             name: neighborhood?.name
          }
       })));
+      const listingFields = ['mlsNumber', 'status', 'class', 'listPrice', 'listDate', 'lastStatus', 'soldPrice', 'soldDate', 'address', 'map', 'images[0]', 'details.numBathrooms', 'details.numBathroomsPlus', 'details.numBedrooms', 'details.numBedroomsPlus', 'details.propertyType', 'details.sqft', 'details.style', 'lot.depth', 'lot.width', 'lot.size', 'lot.acres', 'lot.measurement', 'updatedOn', 'daysOnMarket', 'boardId', 'permissions', 'raw', 'type'].join(",");
+      const {
+         listingStandardStatus,
+         listingStatus,
+         listingLastStatus
+      } = this.config.repliers.autosuggest;
       const listingsRequestParams = {
          search: params.q,
-         boardId: [config.settings.defaults.locations_boardId],
+         searchFields: this.config.repliers.autosuggest.searchFields,
+         boardId: this.config.settings.defaults.boardId,
          lat: params.lat,
          long: params.long,
          radius: this.config.repliers.autosuggest.radius,
          listings: true,
-         status: [RplStatus.A],
+         // Repliers rejects `standardStatus` combined with `status`/`lastStatus`, and the
+         // instance's allowed set is applied to every query — so a RESO instance has to
+         // filter by `standardStatus` alone rather than by the legacy pair.
+         ...(listingStandardStatus?.length ? {
+            standardStatus: listingStandardStatus
+         } : {
+            status: listingStatus,
+            lastStatus: listingLastStatus
+         }),
+         ...(this.config.repliers.autosuggest.displayPublicValue !== undefined ? {
+            displayPublic: this.config.repliers.autosuggest.displayPublicValue
+         } : {}),
          class: [RplClass.condo, RplClass.residential],
-         type: [RplType.Sale],
+         type: params.type ?? this.config.repliers.autosuggest.listingType,
          resultsPerPage: params.resultsPerPage,
-         fields: "mlsNumber,address,type,map,boardId",
-         searchFields: "address.streetName,mlsNumber,address.zip,address.streetNumber",
+         fields: listingFields,
          sortBy: RplSortBy.distanceAsc,
          displayInternetEntireListing: RplYesNo.Y,
-         displayPublic: RplYesNo.Y
+         app_state: params.app_state
       };
       debug("[search] listingsRequest:", listingsRequestParams);
-      const listingsRequest = this.repliersService.listings.search(listingsRequestParams);
-      const [mapbox, listings] = await Promise.all([mapboxRequest, listingsRequest]);
+
+      // Repliers cannot OR a board-prefixed number keyword with the numeric
+      // `address.streetNumber` field in one request (an unmatched numeric leg
+      // zeroes the whole union), so boards with `mlsNumberPrefix` get a
+      // dedicated mlsNumber-only search, widened here with the prefixed variant.
+      // Widening is autosuggest-only — the general listings search never widens.
+      // Failure of this leg degrades, not breaks.
+
+      const mlsNumberRequest = this.config.settings.mlsNumberPrefix && mlsNumberCandidate(params.q) ? (() => {
+         const mlsNumberParams = {
+            ...listingsRequestParams,
+            searchFields: "mlsNumber"
+         };
+         addMlsSearchVariant(mlsNumberParams, this.config.settings.mlsNumberPrefix);
+         return this.listingsService.search(mlsNumberParams).catch(err => {
+            debug("[mapboxAutosuggest] mlsNumber leg failed: %O", err);
+            return null;
+         });
+      })() : null;
+      const listingsRequest = this.listingsService.search(listingsRequestParams);
+      const locationsRequest = this.repliersLocations.autocomplete({
+         search: params.q,
+         boundary: params.boundary ? "true" : "false",
+         hasBoundary: params.hasBoundary == null ? null : params.hasBoundary ? "true" : "false",
+         resultsPerPage: params.resultsPerPage,
+         lat: parseFloat(params.lat),
+         long: parseFloat(params.long),
+         radius: params.radius,
+         // Forward the client's requested location source ('LiveBy', 'MLS'
+         // `UserDefined` geo) to the locations block. Omitted when absent, so the
+         // endpoint keeps searching across all sources.
+         ...(params.source ? {
+            source: params.source
+         } : {})
+      });
+      const [mapbox, listings, locations, mlsNumberListings] = await Promise.all([mapboxRequest, listingsRequest, locationsRequest, mlsNumberRequest]);
       return {
          mapbox,
-         listings
+         listings: mergeMlsNumberListings(listings, mlsNumberListings, params.resultsPerPage),
+         locations
       };
    }
    public async address(params: AutosuggestAddressDto) {
@@ -121,7 +175,7 @@ export default class AutosuggestService {
             streetName,
             streetSuffix,
             streetDirection
-         } = addresser.parseAddress(fullAddress);
+         } = parseAddressSafe(fullAddress);
          debug("[mapped address] processing suggestion: %o", {
             address,
             ..._.omit(ctxAddress, "id"),
@@ -130,13 +184,13 @@ export default class AutosuggestService {
             streetSuffix
          });
          return {
-            country: country.country_code,
-            region: region.region_code,
-            zip: postcode.name,
-            city: place.name,
-            streetNumber: ctxAddress.address_number,
-            streetName: streetSuffix ? streetName : ctxAddress.street_name,
-            streetSuffix: this.mapStreetSuffix(streetSuffix, streetName),
+            country: country?.country_code,
+            region: region?.region_code,
+            zip: postcode?.name,
+            city: place?.name,
+            streetNumber: ctxAddress?.address_number,
+            streetName: streetSuffix ? streetName : ctxAddress?.street_name,
+            streetSuffix: this.mapStreetSuffix(streetSuffix, streetName ?? ctxAddress?.street_name),
             streetSuffixFull: streetSuffix,
             streetDirection,
             fullAddress,
@@ -202,9 +256,9 @@ export default class AutosuggestService {
       }).filter(Boolean);
    }
    private suffixMap = new Map([["Acres", "ACRES"], ["Alley", "ALLEY"], ["Avenue", "AVE"], ["Bay", "BAY"], ["Beach", "BEACH"], ["Bend", "BEND"], ["Boulevard", "BLVD"], ["By-pass", "BYPASS"], ["Byway", "BYWAY"], ["Campus", "CAMPUS"], ["Cape", "CAPE"], ["Centre", "CTR"], ["Chase", "CHASE"], ["Circle", "CIR"], ["Circuit", "CIRCT"], ["Close", "CLOSE"], ["Common", "COMMON"], ["Concession", "CONC"], ["Corners", "CRNRS"], ["Court", "CRT"], ["Cove", "COVE"], ["Crescent", "CRES"], ["Crossing", "CROSS"], ["Cul-de-sac", "CDS"], ["Dale", "DALE"], ["Dell", "DELL"], ["Diversion", "DIVERS"], ["Downs", "DOWNS"], ["Drive", "DR"], ["End", "END"], ["Esplanade", "ESPL"], ["Estates", "ESTATE"], ["Expressway", "EXPY"], ["Extension", "EXTEN"], ["Farm", "FARM"], ["Field", "FIELD"], ["Forest", "FOREST"], ["Freeway", "FWY"], ["Front", "FRONT"], ["Gardens", "GDNS"], ["Gate", "GATE"], ["Glade", "GLADE"], ["Glen", "GLEN"], ["Green", "GREEN"], ["Grounds", "GRNDS"], ["Grove", "GROVE"], ["Harbour", "HARBR"], ["Heath", "HEATH"], ["Heights", "HTS"], ["Highlands", "HGHLDS"], ["Highway", "HWY"], ["Hill", "HILL"], ["Hollow", "HOLLOW"], ["Inlet", "INLET"], ["Island", "ISLAND"], ["Key", "KEY"], ["Knoll", "KNOLL"], ["Landing", "LANDNG"], ["Lane", "LANE"], ["Limits", "LMTS"], ["Line", "LINE"], ["Link", "LINK"], ["Lookout", "LKOUT"], ["Loop", "LOOP"], ["Mall", "MALL"], ["Manor", "MANOR"], ["Maze", "MAZE"], ["Meadow", "MEADOW"], ["Mews", "MEWS"], ["Moor", "MOOR"], ["Mount", "MOUNT"], ["Mountain", "MTN"], ["Orchard", "ORCH"], ["Parade", "PARADE"], ["Park", "PK"], ["Parkway", "PKY"], ["Passage", "PASS"], ["Path", "PATH"], ["Pathway", "PTWAY"], ["Pines", "PINES"], ["Place", "PL"], ["Plateau", "PLAT"], ["Plaza", "PLAZA"], ["Point", "PT"], ["Port", "PORT"], ["Private", "PVT"], ["Promenade", "PROM"], ["Quay", "QUAY"], ["Ramp", "RAMP"], ["Range", "RG"], ["Ridge", "RIDGE"], ["Rise", "RISE"], ["Road", "RD"], ["Route", "RTE"], ["Row", "ROW"], ["Run", "RUN"], ["Square", "SQ"], ["Street", "ST"], ["Subdivision", "SUBDIV"], ["Terrace", "TERR"], ["Thicket", "THICK"], ["Towers", "TOWERS"], ["Townline", "TLINE"], ["Trail", "TRAIL"], ["Turnabout", "TRNABT"], ["Vale", "VALE"], ["Via", "VIA"], ["View", "VIEW"], ["Village", "VILLGE"], ["Villas", "VILLAS"], ["Vista", "VISTA"], ["Walk", "WALK"], ["Way", "WAY"], ["Wharf", "WHARF"], ["Wood", "WOOD"], ["Wynd", "WYND"], ["Abbey", "ABBEY"]]);
-   private mapStreetSuffix(suffix: string, streetName: string) {
+   private mapStreetSuffix(suffix: string | undefined, streetName: string = "") {
       // if its possible to convert return converted
-      if (this.suffixMap.has(suffix)) {
+      if (suffix && this.suffixMap.has(suffix)) {
          return this.suffixMap.get(suffix);
       }
 
@@ -224,8 +278,27 @@ export default class AutosuggestService {
       }
    }
 }
+type ListingsBlock = Awaited<ReturnType<ListingsService["search"]>>;
+
+/**
+ * Appends MLS-number matches after the primary address-fields results, which
+ * cannot see board-prefixed stored numbers. Primary-first keeps short digit
+ * queries (street numbers, zips) behaving exactly as before, while a full
+ * MLS number — which matches no address — surfaces from the MLS leg. `count`
+ * becomes an upper bound — exact deduplication across the full upstream
+ * result sets is unknowable from a single page.
+ */
+export function mergeMlsNumberListings(primary: ListingsBlock, mlsLeg: ListingsBlock | null, resultsPerPage: number): ListingsBlock {
+   if (!mlsLeg?.listings?.length) return primary;
+   const listings = _.uniqBy([...(primary.listings ?? []), ...mlsLeg.listings], "mlsNumber").slice(0, resultsPerPage);
+   return {
+      ...primary,
+      listings,
+      count: (primary.count ?? 0) + (mlsLeg.count ?? 0)
+   };
+}
 function locationsFilter(v: MapboxSuggestion, distance: number): boolean {
-   return (config.mapbox.autosuggest.region_code ? v.context.region.region_code === config.mapbox.autosuggest.region_code : true) && v.distance <= distance;
+   return (config.mapbox.autosuggest.region_code ? v.context.region?.region_code === config.mapbox.autosuggest.region_code : true) && v.distance <= distance;
 }
 function normalizedLocationName(v: MapboxSuggestion): string {
    const {
@@ -235,7 +308,16 @@ function normalizedLocationName(v: MapboxSuggestion): string {
          place
       }
    } = v;
-   return name.toLowerCase() + (place ? ` ${place.name.toLowerCase()}` : "") + (region ? ` ${region.region_code}` : "");
+   return name.toLowerCase() + (place?.name ? ` ${place.name.toLowerCase()}` : "") + (region ? ` ${region.region_code}` : "");
+}
+
+// addresser throws on strings it cannot parse; a bad suggestion must not fail the whole list.
+function parseAddressSafe(fullAddress: string): Partial<ReturnType<typeof addresser.parseAddress>> {
+   try {
+      return addresser.parseAddress(fullAddress);
+   } catch {
+      return {};
+   }
 }
 function searchSession(params: BaseAutosuggestDto): string {
    return params?.searchSession || params?.mapboxSearchSession;

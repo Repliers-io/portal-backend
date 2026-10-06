@@ -1,8 +1,9 @@
 import { injectable } from "tsyringe";
 import _debug from "debug";
-import { contactScheduleSchema } from "../../../validate/contact.js";
-import { maybeClientId } from "../../../lib/utils.js";
-import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { scheduleSchema } from "../../../validate/contact.js";
+import { getBody, maybeClientId } from "../../../lib/utils.js";
+import BaseEventCollectionSelector, { contactEntries, EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectScheduleParams");
 @injectable()
 export default class SelectScheduleParams extends BaseEventCollectionSelector {
@@ -10,8 +11,8 @@ export default class SelectScheduleParams extends BaseEventCollectionSelector {
       const {
          error,
          value
-      } = contactScheduleSchema.validate({
-         ...ctx.request.body,
+      } = scheduleSchema.validate({
+         ...getBody(ctx.request.body),
          clientId: maybeClientId(ctx.state?.["user"]?.sub)
       });
       if (error) {
@@ -19,21 +20,20 @@ export default class SelectScheduleParams extends BaseEventCollectionSelector {
          return null;
       }
       const defaults = await this.getDefaults(ctx);
-      return {
+      const property = await this.getProperty(value.mlsNumber);
+      const inquiryTags = this.config.eventsCollection.formTags?.inquiry;
+      const inquiryTag = property.forRent ? inquiryTags?.rent : inquiryTags?.sale;
+      const payload = {
          ...defaults,
          person: {
             firstName: value.name,
-            emails: [{
-               value: value.email,
-               type: 'main'
-            }],
-            phones: [{
-               value: value.phone,
-               type: 'main'
-            }]
+            ...contactEntries(value.email, value.phone),
+            tags: inquiryTag ? [inquiryTag] : undefined
          },
-         property: await this.getProperty(value.mlsNumber),
+         message: value.message,
+         property,
          type: 'Property Inquiry'
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
 }

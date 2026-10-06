@@ -114,7 +114,7 @@ export default class BossWebhooksService {
       if (webhook && webhook.id) {
          this.loggerGlobal.info({
             data: webhook
-         }, "[BossWebhooksService: installPeopleCreateWebhook]: People created webhook installed: %s", webhookUrl);
+         }, "[BossWebhooksService: installPeopleCreateWebhook]: People created webhook installed: %s", webhookUrl.toString());
          this.runningWebhooksIds.push(webhook.id);
       } else {
          this.loggerGlobal.warn("[BossWebhooksService: installPeopleCreateWebhook]: Failed to install People created webhook: %O", webhook);
@@ -129,7 +129,7 @@ export default class BossWebhooksService {
       if (webhook && webhook.id) {
          this.loggerGlobal.info({
             data: webhook
-         }, "[BossWebhooksService: installPeopleUpdateWebook]: People updated webhook installed: %s", webhookUrl);
+         }, "[BossWebhooksService: installPeopleUpdateWebook]: People updated webhook installed: %s", webhookUrl.toString());
          this.runningWebhooksIds.push(webhook.id);
       } else {
          this.loggerGlobal.warn("[BossWebhooksService: installPeopleUpdateWebook]: Failed to install People updated webhook: %O", webhook);
@@ -144,7 +144,7 @@ export default class BossWebhooksService {
       if (webhook && webhook.id) {
          this.loggerGlobal.info({
             data: webhook
-         }, "[BossWebhooksService: installPeopleRemoveWebook]: People deleted webhook installed: %s", webhookUrl);
+         }, "[BossWebhooksService: installPeopleRemoveWebook]: People deleted webhook installed: %s", webhookUrl.toString());
          this.runningWebhooksIds.push(webhook.id);
       } else {
          this.loggerGlobal.warn("[BossWebhooksService: installPeopleRemoveWebook]: Failed to install People deleted webhook: %O", webhook);
@@ -257,7 +257,7 @@ export default class BossWebhooksService {
          const h = headers();
          h.append("correlationId", body.correlationId);
          for (const event of events) {
-            jsc.publish(`${this.config.nats.worker.consumer_stream}.people.create`, JSON.stringify({
+            await jsc.publish(`${this.config.nats.worker.consumer_stream}.people.create`, JSON.stringify({
                id: event.id,
                payload: event.payload
             }), {
@@ -281,7 +281,7 @@ export default class BossWebhooksService {
       const h = headers();
       h.append("correlationId", body.correlationId);
       for (const event of events) {
-         jsc.publish(`${this.config.nats.worker.consumer_stream}.people.delete`, JSON.stringify({
+         await jsc.publish(`${this.config.nats.worker.consumer_stream}.people.delete`, JSON.stringify({
             id: event.id,
             payload: event.payload
          }), {
