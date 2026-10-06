@@ -1,5 +1,5 @@
 import joi from "joi";
-import { RplClass, RplLastStatus, RplOperator, RplSortBy, RplStatus, RplType, RplYesNo } from "../types/repliers.js";
+import { RplBuildingsSortBy, RplClass, RplLastStatus, RplOperator, RplSortBy, RplStatus, RplType, RplYesNo, RplStandardStatusValues } from "../types/repliers.js";
 
 /**
  * @openapi
@@ -141,7 +141,19 @@ export const rplYesNoSchema = joi.string().valid(...Object.values(RplYesNo));
  *           type: string
  *           enum: [Sus, Exp, Sld, Ter, Dft, Lsd, Sc, Sce, Lc, Pc, Ext, New]
  */
-export const rplLastStatus = joi.array().items(joi.string().valid(...Object.keys(RplLastStatus))).single();
+export const rplLastStatusSchema = joi.array().items(joi.string().valid(...Object.keys(RplLastStatus))).single();
+
+/**
+ * @openapi
+ * components:
+ *  schemas:
+ *     RplStandardStatus:
+ *        type: array
+ *        items:
+ *           type: string
+ *           enum: [Active, Active Under Contract, Canceled, Closed, Coming Soon, Delete, Expired, Hold, Incomplete, Pending, Withdrawn]
+ */
+export const rplStandardStatusSchema = joi.array().items(joi.string().valid(...RplStandardStatusValues)).single();
 
 /**
  * @openapi
@@ -150,8 +162,33 @@ export const rplLastStatus = joi.array().items(joi.string().valid(...Object.keys
  *     RplOperator:
  *        type: string
  *        enum: [AND, OR]
+ *        description: Logical operator (case-insensitive). Only `AND` or `OR`.
  */
-export const rplOperatorSchema = joi.string().valid(...Object.keys(RplOperator));
+export const rplOperatorSchema = joi.string().insensitive().valid(...Object.keys(RplOperator));
+
+/**
+ * @openapi
+ * components:
+ *  schemas:
+ *     RplOperatorExtendedItem:
+ *        type: string
+ *        maxLength: 128
+ *        pattern: '^(?i)(AND|OR)(:.+)?$'
+ *        description: |
+ *          Logical operator (case-insensitive). Either a bare `AND`/`OR`, or a
+ *          field-scoped form `AND:<fieldName>` / `OR:<fieldName>` where
+ *          `<fieldName>` can be any field.
+ *        example: 'AND:city'
+ *     RplOperatorExtended:
+ *        oneOf:
+ *           - $ref: '#/components/schemas/RplOperatorExtendedItem'
+ *           - type: array
+ *             maxItems: 64
+ *             items:
+ *                $ref: '#/components/schemas/RplOperatorExtendedItem'
+ *        description: A single operator string or an array of up to 64 operator strings.
+ */
+export const rplOperatorExtendedSchema = joi.array().items(joi.string().max(128).pattern(/^(AND|OR)(:.+)?$/i)).max(64).single();
 
 /**
  * @openapi
@@ -159,9 +196,19 @@ export const rplOperatorSchema = joi.string().valid(...Object.keys(RplOperator))
  *  schemas:
  *     RplSortBy:
  *        type: string
- *        enum: [createdOnDesc, updatedOnDesc, createdOnAsc, distanceAsc, distanceDesc, updatedOnAsc, soldDateAsc, soldDateDesc, soldPriceAsc, soldPriceDesc, sqftAsc, sqftDesc, listPriceAsc, listPriceDesc, bedsAsc, bedsDesc, bathsDesc, bathsAsc, yearBuiltDesc, yearBuiltAsc, random]
+ *        enum: [createdOnDesc, updatedOnDesc, createdOnAsc, distanceAsc, distanceDesc, updatedOnAsc, soldDateAsc, soldDateDesc, soldPriceAsc, soldPriceDesc, sqftAsc, sqftDesc, listPriceAsc, listPriceDesc, bedsAsc, bedsDesc, bathsDesc, bathsAsc, yearBuiltDesc, yearBuiltAsc, random, statusAscListDateAsc, statusAscListDateDesc, statusAscListPriceAsc, statusAscListPriceDesc, repliersUpdatedOnAsc, repliersUpdatedOnDesc, qualityAsc, qualityDesc, listPricePerSqFtAsc, listPricePerSqFtDesc, soldPricePerSqFtAsc, soldPricePerSqFtDesc, closedDateAsc, closedDateDesc, centroidDistanceAsc, centroidDistanceDesc]
  */
 export const rplSortBySchema = joi.string().valid(...Object.values(RplSortBy));
+
+/**
+ * @openapi
+ * components:
+ *  schemas:
+ *     RplBuildingsSortBy:
+ *        type: string
+ *        enum: [numUnitsDesc]
+ */
+export const rplBuildingsSortBySchema = joi.string().valid(...Object.values(RplBuildingsSortBy));
 
 /**
  * @openapi
@@ -251,3 +298,86 @@ export const csvFieldValidator = (validValues: string[]) => {
       'string.invalidFields': '{{#label}} contains invalid value(s). Valid values are: {{#validValues}}'
    });
 };
+
+/**
+ * @openapi
+ * components:
+ *  schemas:
+ *     RplMap:
+ *        oneOf:
+ *           - type: array
+ *             description: GeoJSON Polygon coordinates — an array of linear rings.
+ *             minItems: 1
+ *             items:
+ *                type: array
+ *                description: A linear ring (≥3 coordinate pairs).
+ *                minItems: 3
+ *                items:
+ *                   type: array
+ *                   description: A coordinate pair [longitude, latitude].
+ *                   minItems: 2
+ *                   maxItems: 2
+ *                   items:
+ *                      type: number
+ *           - type: array
+ *             description: GeoJSON MultiPolygon coordinates — an array of polygons.
+ *             minItems: 1
+ *             items:
+ *                type: array
+ *                description: A polygon (array of linear rings).
+ *                minItems: 1
+ *                items:
+ *                   type: array
+ *                   description: A linear ring (≥3 coordinate pairs).
+ *                   minItems: 3
+ *                   items:
+ *                      type: array
+ *                      minItems: 2
+ *                      maxItems: 2
+ *                      items:
+ *                         type: number
+ *        example: [[[-79.38, 43.65], [-79.37, 43.65], [-79.37, 43.66], [-79.38, 43.65]]]
+ */
+const rplCoordinateSchema = joi.array().items(joi.number()).length(2);
+const rplLinearRingSchema = joi.array().items(rplCoordinateSchema).min(3);
+const rplPolygonCoordinatesSchema = joi.array().items(rplLinearRingSchema).min(1);
+const rplMultiPolygonCoordinatesSchema = joi.array().items(rplPolygonCoordinatesSchema).min(1);
+export const rplMapSchema = joi.alternatives().try(rplPolygonCoordinatesSchema, rplMultiPolygonCoordinatesSchema).messages({
+   "alternatives.match": "map must be GeoJSON Polygon coordinates ([[[lng,lat],...]]) or MultiPolygon coordinates ([[[[lng,lat],...]],...])"
+});
+
+/**
+ * @openapi
+ * components:
+ *  schemas:
+ *     RplMapFlexible:
+ *        oneOf:
+ *           - type: string
+ *             description: GeoJSON Polygon or MultiPolygon coordinates as a JSON string (used in query parameters).
+ *             example: '[[[-79.38, 43.65], [-79.37, 43.65], [-79.37, 43.66], [-79.38, 43.65]]]'
+ *           - $ref: '#/components/schemas/RplMap'
+ *        description: Map schema that accepts both JSON string (from query params) and array (from POST body). Polygon and MultiPolygon coordinate shapes are both accepted.
+ */
+/**
+ * Map schema that accepts both JSON string (from GET query params) and array (from POST body)
+ * For GET requests, validates the JSON structure but keeps it as a string
+ * For POST requests, validates the array structure
+ */
+export const rplMapFlexibleSchema = joi.alternatives().try(joi.string().custom((value, helpers) => {
+   try {
+      const parsed = JSON.parse(value);
+      const {
+         error
+      } = rplMapSchema.validate(parsed);
+      if (error) {
+         return helpers.error('any.invalid');
+      }
+      // Return the original string, not the parsed value
+      return value;
+   } catch (err) {
+      return helpers.error('string.invalidJson');
+   }
+}, 'validate map JSON string without parsing').messages({
+   'string.invalidJson': 'map must be a valid JSON string representing GeoJSON Polygon or MultiPolygon coordinates',
+   'any.invalid': 'map must be valid GeoJSON Polygon or MultiPolygon coordinates'
+}), rplMapSchema);

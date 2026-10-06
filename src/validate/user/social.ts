@@ -9,10 +9,12 @@ export const userSocialUrlSchema = joi.object<UserSocialUrlDto>({
    provider: socialProviderSchema
 });
 export interface UserSocialCallbackDto {
+   code: string;
    email: string;
    provider: SocialProvider;
 }
 export const userSocialCallbackSchema = joi.object<UserSocialCallbackDto>({
+   code: joi.string().required(),
    email: joi.string().email().required(),
    provider: socialProviderSchema
 });

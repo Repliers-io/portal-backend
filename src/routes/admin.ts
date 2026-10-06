@@ -6,6 +6,7 @@ import { RoleMiddlewareCreator } from "../providers/middleware/role.js";
 import { UserRole } from "../constants.js";
 import AdminService from "../services/admin.js";
 import { adminCreateAgentBatchSchema, adminUpdateAgentSchema, adminGetAgentsSchema } from "../validate/admin.js";
+import { getBody } from "../lib/utils.js";
 const router = new Router({
    prefix: "/admin"
 });
@@ -32,7 +33,9 @@ router.post('/agents', async ctx => {
    const {
       error,
       value
-   } = adminCreateAgentBatchSchema.validate([...ctx.request.body]);
+   } = adminCreateAgentBatchSchema.validate([
+   // this is because koa-body didn't expect that body can be an array
+   ...(ctx.request.body as unknown as any[])]);
    if (error) {
       ctx.throw(new ApiError(error.message, 400));
       return;
@@ -46,7 +49,7 @@ router.patch('/agents/:agentId', async ctx => {
       error,
       value
    } = adminUpdateAgentSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       agentId: ctx.params['agentId']
    });
    if (error) {

@@ -20,7 +20,7 @@ export default {
          /** 30 minutes */
          resend_ttl_ms: 60_000,
          /** 1 minutes */
-         message: "Please use this code finish your login: ",
+         message: "Please use this code to finish your login: ",
          message_type: "code"
          // debug_expose_code: false, /** for development purposes only */
       },
@@ -42,7 +42,9 @@ export default {
    app: {
       disable_persistence: true,
       useSwagger: false,
-      loglevel: "info",
+      logging: {
+         loglevel: "info"
+      },
       stats_top_n: 100
    },
    cache: {
@@ -99,10 +101,12 @@ export default {
    },
    settings: {
       max_estimate_id: 0,
-      scrubbing_ref_board_id: 9997,
-      scrubbing_board_ids: [boardId],
-      scrubbing_duplicates_enabled: false,
-      scrubbing_force_display_public_yes: false,
+      scrubbing: {
+         ref_board_id: 9997,
+         board_ids: [boardId],
+         duplicates_enabled: false,
+         force_display_public_yes: false
+      },
       defaults: {
          boardId: [boardId],
          locations_boardId: boardId
@@ -114,10 +118,11 @@ export default {
          boardId: boardId,
          active_count_limit: 5
       },
-      hide_unavailable_listings_statuses: ["Ter", "Exp"],
+      hide_unavailable_listings_statuses: [],
       hide_unavailable_listings_http_code: 410,
       validationVersion: "",
       // fixme: no default in config
-      extended_property_details: true
+      extended_property_details: true,
+      featuredListings: []
    }
 } as DeepPartial<AppConfig>; // only for convenience when manually editing

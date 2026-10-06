@@ -7,10 +7,14 @@ export interface RplSearchesCreateDto {
    streetNumbers?: string[];
    streetNames?: string[];
    minBeds?: number;
+   minBedrooms?: number;
    maxBeds?: number;
+   maxBedrooms?: number;
    maxMaintenanceFee?: number;
    minBaths?: number;
+   minBathrooms?: number;
    maxBaths?: number;
+   maxBathrooms?: number;
    areas?: string[];
    cities?: string[];
    neighborhoods?: string;
@@ -33,6 +37,15 @@ export interface RplSearchesCreateDto {
    waterSource?: string[];
    heating?: string[];
    swimmingPool?: string[];
+   minYearBuilt?: number;
+   maxYearBuilt?: number;
+   minSqft?: number;
+   maxSqft?: number;
+   minLotSizeSqft?: number;
+   maxLotSizeSqft?: number;
+   minLotWidth?: number;
+   maxLotWidth?: number;
+   keywords?: string[];
 }
 export interface RplSaveSearch extends RplSearchesCreateDto {
    searchId: number;

@@ -148,40 +148,56 @@ export default class AuthService {
       return code;
    }
    private async otpSendRateOpened(clientId: number) {
-      const lastSent = await this.db.get(this.otpSentKey(clientId));
+      const lastSent = await this.db.get<number>(this.otpSentKey(clientId));
       if (lastSent) {
+         const retryAfter = Math.ceil((this.config.auth.otp.resend_ttl_ms - (Date.now() - lastSent)) / 1000);
          this.logger.error({
             data: {
                clientId
             }
          }, "403 - [AuthService: otpSendRateOpened]: You have already requested a new OTP. Please wait before requesting another one.");
-         throw new ApiError("You have already requested a new OTP. Please wait before requesting another one.", 403);
+         throw new ApiError("You have already requested a new OTP. Please wait before requesting another one.", 403, {
+            "Retry-After": String(retryAfter)
+         });
       }
    }
    private otpSentKey(clientId: number) {
       return `otp_sent_${clientId}`;
    }
    private formatOtpMessageContent(code: string) {
-      const linkTypeContent = {
-         message: this.config.auth.otp.message,
-         links: [`${this.config.auth.otp.uri}?code=${code}`]
+      const {
+         message,
+         uri,
+         message_type,
+         messageSubject
+      } = this.config.auth.otp;
+      const link = `${uri}?code=${code}`;
+      const codeTypeMessage = `${message} ${code}`;
+      const content = (() => {
+         switch (message_type) {
+            case "code":
+               return {
+                  message: codeTypeMessage
+               };
+            case "link_and_code":
+               return {
+                  message: codeTypeMessage,
+                  links: [link]
+               };
+            case "link":
+            default:
+               return {
+                  message,
+                  links: [link]
+               };
+         }
+      })();
+      return {
+         ...(messageSubject && {
+            subject: messageSubject
+         }),
+         ...content
       };
-      const codeTypeMessage = `${this.config.auth.otp.message} ${code}`;
-      switch (this.config.auth.otp.message_type) {
-         case "link":
-            return linkTypeContent;
-         case "code":
-            return {
-               message: codeTypeMessage
-            };
-         case "link_and_code":
-            return {
-               message: codeTypeMessage,
-               links: [`${this.config.auth.otp.uri}?code=${code}`]
-            };
-         default:
-            return linkTypeContent;
-      }
    }
    private async ensureMailingAllowed(client: RplClientsGetResponse | RplClientsClient) {
       await this.clients.update({

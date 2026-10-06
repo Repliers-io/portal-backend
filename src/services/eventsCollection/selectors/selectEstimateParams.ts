@@ -1,8 +1,9 @@
 import { injectable } from "tsyringe";
 import _debug from "debug";
 import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
-import { maybeClientId } from "../../../lib/utils.js";
+import { getBody, maybeClientId } from "../../../lib/utils.js";
 import { estimateAddSchema } from "../../../validate/estimate.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:SelectEstimateParams");
 @injectable()
 export default class SelectEstimateParams extends BaseEventCollectionSelector {
@@ -12,7 +13,7 @@ export default class SelectEstimateParams extends BaseEventCollectionSelector {
             error,
             value
          } = estimateAddSchema.validate({
-            ...ctx.request.body,
+            ...getBody(ctx.request.body),
             clientId: maybeClientId(ctx.state?.["user"]?.sub)
          });
          if (error) {
@@ -24,7 +25,7 @@ export default class SelectEstimateParams extends BaseEventCollectionSelector {
             details
          } = value;
          const price = this.isEstimateModel(ctx.response.body) ? ctx.response.body.estimate : undefined;
-         return {
+         const payload = {
             ...defaults,
             person: {
                ...defaults.person,
@@ -41,7 +42,8 @@ export default class SelectEstimateParams extends BaseEventCollectionSelector {
                area: this.stringifyIfSet(details?.sqft)
             },
             type: "Seller Inquiry"
-         };
+         } as BossEventsCreateRequest;
+         return payload;
       } catch (error) {
          debug("Fail to generate FUB params due to error %O", error);
          return null;

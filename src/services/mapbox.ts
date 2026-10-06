@@ -27,37 +27,39 @@ export interface MapboxSuggestion {
    place_formatted: string; // 'Saint-Stanislas-de-Kostka, Quebec J0S 1W0, Canada',
    address: string;
    full_address: string;
+   // Mapbox only includes the context levels it resolved; rural addresses often
+   // have no postcode/place, and non-exact matches have no address.
    context: {
-      country: {
+      country?: {
          name: string;
          country_code: string;
       };
-      region: {
+      region?: {
          name: string;
          region_code: string;
       };
-      postcode: {
+      postcode?: {
          name: string;
       };
-      district: {
+      district?: {
          name: string;
       };
-      place: {
+      place?: {
          name: string;
       };
-      locality: {
+      locality?: {
          name: string;
       };
-      neighborhood: {
+      neighborhood?: {
          name: string;
       };
-      address: {
+      address?: {
          id: string;
          name: string;
          address_number: string;
          street_name: string;
       };
-      street: {
+      street?: {
          name: string;
       };
    };

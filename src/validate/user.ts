@@ -4,7 +4,7 @@ import { phoneSchema } from "./common.js";
 export const userUpdateSchema = joi.object<RplClientsUpdateDto>().keys({
    fname: joi.string(),
    lname: joi.string(),
-   phone: phoneSchema.allow(null),
+   phone: phoneSchema.allow(null).optional(),
    preferences: joi.object().keys({
       email: joi.boolean(),
       sms: joi.boolean(),

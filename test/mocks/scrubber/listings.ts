@@ -152,7 +152,7 @@ export const singleListing = {
    occupancy: null,
    updatedOn: "2024-05-12T00:13:00.000Z",
    condominium: {
-      ammenities: ["Family Oriented"],
+      ammenities: ["BBQs Allowed", "Car Wash", "Exercise Room", "Guest Suites", "Indoor Pool", "Party Room/Meeting Room"],
       buildingInsurance: null,
       condoCorp: null,
       condoCorpNum: null,
@@ -164,13 +164,13 @@ export const singleListing = {
       propertyMgr: null,
       stories: null,
       fees: {
-         cableInlc: null,
-         heatIncl: null,
-         hydroIncl: null,
-         maintenance: null,
-         parkingIncl: "N",
-         taxesIncl: null,
-         waterIncl: null
+         "cableInlc": "Y",
+         "heatIncl": "Y",
+         "hydroIncl": "Y",
+         "maintenance": "1537",
+         "parkingIncl": "Y",
+         "taxesIncl": null,
+         "waterIncl": null
       },
       lockerUnitNumber: null,
       ensuiteLaundry: null,
@@ -770,8 +770,8 @@ export const singleListing = {
       type: "Sale",
       listPrice: "1074900.00",
       listDate: "2023-07-26T00:00:00.000Z",
-      lastStatus: "Ter",
-      soldPrice: null,
+      lastStatus: "Sld",
+      soldPrice: 900000.00,
       soldDate: null,
       office: {
          brokerageName: "POWER MARKETING REAL ESTATE INC."
@@ -788,6 +788,28 @@ export const singleListing = {
          unavailableDate: "2023-08-21T00:00:00.000Z",
          expiryDate: null,
          extensionEntryDate: null
+      },
+      address: {
+         area: "Ottawa",
+         city: "Ottawa",
+         country: null,
+         district: "3602",
+         majorIntersection: null,
+         neighborhood: "Riverview Park",
+         streetDirection: null,
+         streetName: "ALTA VISTA",
+         streetNumber: "1657",
+         streetSuffix: "Drive",
+         unitNumber: null,
+         zip: "K1G 0G4",
+         state: "ON",
+         communityCode: null,
+         streetDirectionPrefix: null
+      },
+      permissions: {
+         displayAddressOnInternet: "Y",
+         displayPublic: "Y",
+         displayInternetEntireListing: "Y"
       }
    }, {
       mlsNumber: "1372330",
@@ -812,6 +834,28 @@ export const singleListing = {
          unavailableDate: "2024-01-30T00:00:00.000Z",
          expiryDate: null,
          extensionEntryDate: null
+      },
+      address: {
+         area: "Ottawa",
+         city: "Ottawa",
+         country: null,
+         district: "3602",
+         majorIntersection: null,
+         neighborhood: "Riverview Park",
+         streetDirection: null,
+         streetName: "ALTA VISTA",
+         streetNumber: "1657",
+         streetSuffix: "Drive",
+         unitNumber: null,
+         zip: "K1G 0G4",
+         state: "ON",
+         communityCode: null,
+         streetDirectionPrefix: null
+      },
+      permissions: {
+         displayAddressOnInternet: "N",
+         displayPublic: "Y",
+         displayInternetEntireListing: "Y"
       }
    }, {
       mlsNumber: "1371494",
@@ -836,6 +880,28 @@ export const singleListing = {
          unavailableDate: "2023-12-23T00:00:00.000Z",
          expiryDate: null,
          extensionEntryDate: null
+      },
+      address: {
+         area: "Ottawa",
+         city: "Ottawa",
+         country: null,
+         district: "3602",
+         majorIntersection: null,
+         neighborhood: "Riverview Park",
+         streetDirection: null,
+         streetName: "ALTA VISTA",
+         streetNumber: "1657",
+         streetSuffix: "Drive",
+         unitNumber: null,
+         zip: "K1G 0G4",
+         state: "ON",
+         communityCode: null,
+         streetDirectionPrefix: null
+      },
+      permissions: {
+         displayAddressOnInternet: "N",
+         displayPublic: "N",
+         displayInternetEntireListing: "Y"
       }
    }, {
       mlsNumber: "1366212",
@@ -860,7 +926,26 @@ export const singleListing = {
          unavailableDate: "2023-12-09T00:00:00.000Z",
          expiryDate: null,
          extensionEntryDate: null
+      },
+      address: {
+         area: "Ottawa",
+         city: "Ottawa",
+         country: null,
+         district: "3602",
+         majorIntersection: null,
+         neighborhood: "Riverview Park",
+         streetDirection: null,
+         streetName: "ALTA VISTA",
+         streetNumber: "1657",
+         streetSuffix: "Drive",
+         unitNumber: null,
+         zip: "K1G 0G4",
+         state: "ON",
+         communityCode: null,
+         streetDirectionPrefix: null
       }
+      /** No Permissions should be treated as displayPublic: "N",  */
+      // permissions:
    }, {
       mlsNumber: "1360200",
       type: "Sale",
@@ -1068,17 +1153,56 @@ export const singleListing = {
    duplicates: [2584, 9997, 9998],
    boardId: 12
 };
-const singleListingUStatus = _.cloneDeep(singleListing);
-singleListingUStatus.status = "U";
-export { singleListingUStatus };
+const singleListingInternetAutomatedValuationDisplayYes = _.cloneDeep(singleListing);
+(singleListingInternetAutomatedValuationDisplayYes.raw as Record<string, any>)["InternetAutomatedValuationDisplayYN"] = true;
+export { singleListingInternetAutomatedValuationDisplayYes };
+const singleListingInternetAutomatedValuationDisplayNo = _.cloneDeep(singleListing);
+(singleListingInternetAutomatedValuationDisplayNo.raw as Record<string, any>)["InternetAutomatedValuationDisplayYN"] = false;
+export { singleListingInternetAutomatedValuationDisplayNo };
+const singleListingDisplayOnMapN = {
+   ...singleListing,
+   permissions: {
+      displayAddressOnInternet: "Y",
+      displayPublic: "Y",
+      displayInternetEntireListing: "Y",
+      displayOnMap: "N"
+   }
+};
+export { singleListingDisplayOnMapN };
+const singleListingDisplayInternetEntireListingN = {
+   ...singleListing,
+   permissions: {
+      displayAddressOnInternet: "Y",
+      displayPublic: "Y",
+      displayInternetEntireListing: "N"
+   }
+};
+export { singleListingDisplayInternetEntireListingN };
+const singleListingHistoryHasDisplayInternetEntireListingN = _.cloneDeep(singleListing);
+singleListingHistoryHasDisplayInternetEntireListingN.history.at(0)!.permissions!.displayInternetEntireListing = "N";
+export { singleListingHistoryHasDisplayInternetEntireListingN };
+const singleListingStatusUDisplayPublicY = _.cloneDeep(singleListing);
+singleListingStatusUDisplayPublicY.status = "U";
+singleListingStatusUDisplayPublicY.permissions.displayPublic = "Y";
+export { singleListingStatusUDisplayPublicY };
+const listingsArray1 = [singleListingStatusUDisplayPublicY, singleListingDisplayInternetEntireListingN];
+export { listingsArray1 };
+const singleListingStatusUDisplayPublicYNoHistory = _.cloneDeep(singleListing);
+singleListingStatusUDisplayPublicYNoHistory.status = "U";
+singleListingStatusUDisplayPublicYNoHistory.permissions.displayPublic = "Y";
+delete (singleListingStatusUDisplayPublicYNoHistory as any).history;
+export { singleListingStatusUDisplayPublicYNoHistory };
 const singleListingDispayPublicN = _.cloneDeep(singleListing);
 singleListingDispayPublicN.permissions.displayPublic = "N";
 export { singleListingDispayPublicN };
+const singleListingDispayPublicNStatusU = _.cloneDeep(singleListing);
+singleListingDispayPublicNStatusU.permissions.displayPublic = "N";
+singleListingDispayPublicNStatusU.status = "U";
+export { singleListingDispayPublicNStatusU };
 const singleListingDispayAddressOnInternetN = _.cloneDeep(singleListing);
 singleListingDispayAddressOnInternetN.permissions.displayAddressOnInternet = "N";
 export { singleListingDispayAddressOnInternetN };
 const singleListingWOComparables = _.cloneDeep(singleListing);
-singleListingWOComparables.status = "U";
 const singleListingWComparables = {
    ...singleListingWOComparables,
    comparables: [{
@@ -1105,6 +1229,11 @@ const singleListingWComparables = {
          state: "ON",
          communityCode: null,
          streetDirectionPrefix: null
+      },
+      permissions: {
+         displayPublic: "Y",
+         displayAddressOnInternet: "Y",
+         displayInternetEntireListing: "Y"
       },
       details: {
          airConditioning: "Central Air Conditioning",
@@ -1283,6 +1412,11 @@ const singleListingWComparables = {
          state: "ON",
          communityCode: null,
          streetDirectionPrefix: null
+      },
+      permissions: {
+         displayPublic: "N",
+         displayAddressOnInternet: "Y",
+         displayInternetEntireListing: "Y"
       },
       details: {
          airConditioning: "Central Air Conditioning",
@@ -1618,6 +1752,192 @@ const singleListingWComparables = {
    }]
 };
 export { singleListingWComparables };
+const singleListingWComparablesWDisplayInternetEntireListingN = _.cloneDeep(singleListingWComparables);
+singleListingWComparablesWDisplayInternetEntireListingN.comparables = [{
+   mlsNumber: "1383042",
+   type: "Sale",
+   listPrice: "799900.00",
+   listDate: "2024-03-25T00:00:00.000Z",
+   lastStatus: "Sld",
+   soldPrice: "799900.00",
+   soldDate: "2024-04-10T00:00:00.000Z",
+   address: {
+      area: "",
+      city: "Ottawa",
+      country: null,
+      district: "3605",
+      majorIntersection: null,
+      neighborhood: "Alta Vista",
+      streetDirection: null,
+      streetName: "WILLOWDALE",
+      streetNumber: "1233",
+      streetSuffix: "Avenue",
+      unitNumber: null,
+      zip: "K1H 7S5",
+      state: "ON",
+      communityCode: null,
+      streetDirectionPrefix: null
+   },
+   permissions: {
+      displayPublic: "Y",
+      displayAddressOnInternet: "Y",
+      displayInternetEntireListing: "N"
+   },
+   details: {
+      airConditioning: "Central Air Conditioning",
+      basement1: "Full",
+      basement2: "Partly Finished",
+      centralVac: null,
+      den: null,
+      description: "This spacious 4 bedroom Alta Vista home is located on a quiet tree lined street. Main floor features living room with gas fireplace, dining room and kitchen upgraded in 2012 with newer tile flooring in 2022, stovetop 2019 and dishwasher 2021. 2nd level has 4 bedrooms and bath that was upgraded in 2012 with whirlpool tub, heated granite tile floor and granite shower tile. Lower level with rec room, den and plenty of storage. Upgrades include AC 2020, furnace 2013, paint 2022, roof 2013, gas fireplace 2014, natural gas hook up for bbq, and some newer windows, newer flooring in basement. A short walk to Bank Street, public transportation, shopping, schools, parks and more. Inlaw suite potential with side door leading to basement. Hardwood floors being redone in April 2024.\r\nSchedule B with all offers",
+      elevator: null,
+      exteriorConstruction1: "Brick,Siding",
+      exteriorConstruction2: null,
+      extras: "Built/In Oven,Cooktop,Dishwasher,Dryer,Refrigerator,Washer",
+      furnished: null,
+      garage: null,
+      heating: "Forced Air",
+      numBathrooms: "2",
+      numBathroomsPlus: null,
+      numBedrooms: "4",
+      numBedroomsPlus: "0",
+      numFireplaces: null,
+      numGarageSpaces: "0",
+      numParkingSpaces: "2",
+      numRooms: "13",
+      numRoomsPlus: null,
+      patio: null,
+      propertyType: "Detached",
+      minSqft: null,
+      maxSqft: null,
+      sqft: null,
+      style: "2 Storey",
+      swimmingPool: null,
+      virtualTourUrl: null,
+      yearBuilt: "1960",
+      landAccessType: null,
+      landSewer: null,
+      viewType: null,
+      zoningDescription: "residential",
+      analyticsClick: null,
+      moreInformationLink: null,
+      alternateURLVideoLink: null,
+      flooringType: "Hardwood,Mixed,Tile",
+      foundationType: "Poured Concrete",
+      landscapeFeatures: null,
+      fireProtection: null,
+      roofMaterial: null,
+      farmType: null,
+      zoningType: null,
+      businessType: null,
+      businessSubType: null,
+      landDisposition: null,
+      storageType: null,
+      constructionStyleSplitLevel: null,
+      constructionStatus: null,
+      loadingType: null,
+      ceilingType: null,
+      liveStreamEventURL: null,
+      energuideRating: null,
+      amperage: null,
+      sewer: "Sewer Connected",
+      familyRoom: null,
+      zoning: null,
+      driveway: null,
+      leaseTerms: null,
+      centralAirConditioning: "Y",
+      certificationLevel: null,
+      energyCertification: null,
+      parkCostMonthly: null,
+      commonElementsIncluded: null,
+      greenPropertyInformationStatement: null,
+      handicappedEquipped: null,
+      laundryLevel: null,
+      numKitchens: null,
+      numKitchensPlus: null,
+      sqftRange: null,
+      numDrivewaySpaces: null,
+      HOAFee: null,
+      HOAFee2: null,
+      HOAFee3: null,
+      waterSource: null,
+      livingAreaMeasurement: null,
+      waterfront: null,
+      bathrooms: {
+         "1": {
+            level: null,
+            count: null,
+            pieces: null
+         },
+         "2": {
+            level: null,
+            count: null,
+            pieces: null
+         },
+         "3": {
+            level: null,
+            count: null,
+            pieces: null
+         },
+         "4": {
+            level: null,
+            count: null,
+            pieces: null
+         },
+         "5": {
+            level: null,
+            count: null,
+            pieces: null
+         }
+      },
+      numBathroomsHalf: "1"
+   },
+   condominium: {
+      ammenities: [],
+      buildingInsurance: null,
+      condoCorp: null,
+      condoCorpNum: null,
+      exposure: null,
+      lockerNumber: "",
+      locker: null,
+      parkingType: "Open",
+      pets: null,
+      propertyMgr: null,
+      stories: null,
+      fees: {
+         cableInlc: null,
+         heatIncl: null,
+         hydroIncl: null,
+         maintenance: null,
+         parkingIncl: "N",
+         taxesIncl: null,
+         waterIncl: null
+      },
+      lockerUnitNumber: null,
+      ensuiteLaundry: null,
+      sharesPercentage: null,
+      lockerLevel: null,
+      unitNumber: null
+   },
+   images: ["oreb/IMG-1383042_1.jpg", "oreb/IMG-1383042_2.jpg", "oreb/IMG-1383042_3.jpg", "oreb/IMG-1383042_4.jpg", "oreb/IMG-1383042_5.jpg", "oreb/IMG-1383042_6.jpg", "oreb/IMG-1383042_7.jpg", "oreb/IMG-1383042_8.jpg", "oreb/IMG-1383042_9.jpg", "oreb/IMG-1383042_10.jpg", "oreb/IMG-1383042_11.jpg", "oreb/IMG-1383042_12.jpg", "oreb/IMG-1383042_13.jpg", "oreb/IMG-1383042_14.jpg", "oreb/IMG-1383042_15.jpg", "oreb/IMG-1383042_16.jpg", "oreb/IMG-1383042_17.jpg", "oreb/IMG-1383042_18.jpg", "oreb/IMG-1383042_19.jpg", "oreb/IMG-1383042_20.jpg", "oreb/IMG-1383042_21.jpg", "oreb/IMG-1383042_22.jpg", "oreb/IMG-1383042_23.jpg", "oreb/IMG-1383042_24.jpg", "oreb/IMG-1383042_25.jpg"],
+   timestamps: {
+      idxUpdated: "2024-04-10T14:22:00.000Z",
+      listingUpdated: "2024-04-10T14:22:00.000Z",
+      photosUpdated: "2024-03-26T14:33:08.000Z",
+      conditionalExpiryDate: null,
+      terminatedDate: null,
+      suspendedDate: null,
+      listingEntryDate: "2024-03-25T00:00:00.000Z",
+      closedDate: "2024-05-08T00:00:00.000Z",
+      unavailableDate: "2024-04-10T00:00:00.000Z",
+      expiryDate: null,
+      extensionEntryDate: null,
+      possessionDate: null,
+      repliersUpdatedOn: "2024-04-10T19:02:30.884Z"
+   },
+   distance: 2.829387399359894
+}];
+export { singleListingWComparablesWDisplayInternetEntireListingN };
 const singleListingsAStatusWDuplicates = _.cloneDeep(singleListing);
 singleListingsAStatusWDuplicates.status = "A";
 const {

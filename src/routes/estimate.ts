@@ -2,7 +2,7 @@ import Router from "@koa/router";
 import { container } from "tsyringe";
 import { Middleware } from "koa-jwt";
 import { ApiError } from "../lib/errors.js";
-import { maybeClientId } from "../lib/utils.js";
+import { getBody, maybeClientId } from "../lib/utils.js";
 import EstimateService from "../services/estimate.js";
 import { deleteEstimateSchema, estimateAddSchema, estimateGetSchema, estimatePatchSchema, estimatePropertyDetailsSchema, estimatesByClientIdGetSchema } from "../validate/estimate.js";
 import { EventsCollectionMiddleware } from "../providers/middleware/eventsCollection.js";
@@ -301,7 +301,7 @@ router.post("/", authMiddleware, async (ctx, next) => {
       error,
       value
    } = estimateAddSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
    if (error) {
@@ -330,7 +330,7 @@ router.patch("/:estimateId", authBlockingMiddleware, assertOwnership, async ctx 
       error,
       value
    } = estimatePatchSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       estimateId: ctx.params["estimateId"],
       clientId: maybeClientId(ctx.state?.["user"]?.sub)
    });
@@ -506,6 +506,30 @@ router.delete("/:estimateId", authBlockingMiddleware, assertOwnership, async ctx
  *            schema:
  *                type: number
  *            required: false
+ *          - in: query
+ *            name: zip
+ *            schema:
+ *                type: string
+ *            required: false
+ *          - in: query
+ *            name: streetSuffix
+ *            schema:
+ *                type: string
+ *            required: false
+ *          - in: query
+ *            name: streetDirection
+ *            schema:
+ *                type: string
+ *            required: false
+ *          - in: query
+ *            name: searchStrategy
+ *            schema:
+ *                type: array
+ *                items:
+ *                   type: string
+ *                   enum: [streetSuffixInStreetName]
+ *            required: false
+ *            description: Strategy for flexible street name matching.
  *       responses:
  *          400:
  *             $ref: '#/components/responses/BadRequest'

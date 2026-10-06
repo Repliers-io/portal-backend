@@ -20,7 +20,7 @@ export default class SelectClientRegistrationParams extends BaseEventCollectionS
          debug("[SelectClientRegistrationParams] user is not defined");
          return null;
       }
-      return {
+      const payload = {
          person: {
             ...this.envSpecificPersonFields(user, provider),
             firstName: user.fname,
@@ -38,7 +38,8 @@ export default class SelectClientRegistrationParams extends BaseEventCollectionS
          type: "Registration",
          occurredAt: new Date().toISOString(),
          pageReferrer: referer
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
    envSpecificPersonFields(user: RplClientsClient, provider: string): CustomPeopleFields {
       const defaultFields = {

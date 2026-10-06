@@ -1,7 +1,8 @@
-import { IncomingMessage } from "http";
-import { TokenSet } from "openid-client";
+import { TokenEndpointResponse, TokenEndpointResponseHelpers } from "openid-client";
 export default interface SocialProviderBase {
    getUrl(): string;
-   callback(req: IncomingMessage): Promise<TokenSet>;
-   refresh(params: Record<string, unknown>): Promise<TokenSet>;
+   callback(params: {
+      code: string;
+   }): Promise<TokenEndpointResponse & TokenEndpointResponseHelpers>;
+   refresh(params: Record<string, unknown>): Promise<TokenEndpointResponse & TokenEndpointResponseHelpers>;
 }

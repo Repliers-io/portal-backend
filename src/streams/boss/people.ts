@@ -4,7 +4,7 @@ import StreamWorker from "../worker.js";
 import SyncService, { PeopleSyncPayload } from "../../services/sync.js";
 import type { Logger } from "pino";
 import BossWebhooksService from "../../services/boss/webhook.js";
-import { BossPeopleSingle } from "services/boss.js";
+import { BossPeopleSingle } from "../../services/boss.js";
 import config from "../../config.js";
 
 /*

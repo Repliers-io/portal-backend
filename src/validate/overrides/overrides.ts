@@ -1,11 +1,12 @@
 import Joi from 'joi';
-import * as PolsinelloOverrides from './polsinello.js';
-export * from './polsinello.js';
-export const overrides = (version?: string) => {
+/** What an instance may override. Anything absent falls back to the shared schema. */
+type ContactOverrides = {
+   contactSchema?: Joi.ObjectSchema;
+   requestInfoSchema?: Joi.ObjectSchema;
+};
+export const overrides = (version?: string): ContactOverrides => {
    switch (version) {
-      case 'polsinello':
-         return PolsinelloOverrides;
       default:
-         return {} as Record<string, Joi.Schema>;
+         return {};
    }
 };

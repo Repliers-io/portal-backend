@@ -1,8 +1,10 @@
-import Router, { Middleware } from "@koa/router";
+import Router from "@koa/router";
 import { container } from "tsyringe";
 import { ApiError } from "../../lib/errors.js";
 import AssetsService from "../../services/user/assets.js";
 import { userAssetsCreateSchema, userAssetsGetSchema, userAssetsRemoveSchema } from "../../validate/user/assets.js";
+import { getBody } from "../../lib/utils.js";
+import { Middleware } from "koa";
 const authMiddleware = container.resolve<Middleware>("middleware.jwt");
 const assetsService = container.resolve(AssetsService);
 const router = new Router({
@@ -46,7 +48,7 @@ router.post('/:type', authMiddleware, async ctx => {
       error,
       value
    } = userAssetsCreateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       type: ctx.params['type'],
       email: ctx.state?.["user"]?.email
    });
@@ -131,7 +133,7 @@ router.post('/:type/remove', authMiddleware, async ctx => {
       error,
       value
    } = userAssetsRemoveSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       type: ctx.params['type'],
       email: ctx.state?.["user"]?.email
    });

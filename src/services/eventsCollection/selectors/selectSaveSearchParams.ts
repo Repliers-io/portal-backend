@@ -3,6 +3,8 @@ import _debug from "debug";
 import BaseEventCollectionSelector, { EventsCollectionPropertiesSelector } from "./baseEventCollectionSelector.js";
 import { searchesCreateSchema } from "../../../validate/searches.js";
 import { RplSaveSearch } from "../../../services/repliers/searches.js";
+import { getBody } from "../../../lib/utils.js";
+import { BossEventsCreateRequest } from "../../boss.ts";
 const debug = _debug("repliers:services:selectSaveSearchParams");
 @injectable()
 export default class SelectSaveSearchParams extends BaseEventCollectionSelector {
@@ -11,7 +13,7 @@ export default class SelectSaveSearchParams extends BaseEventCollectionSelector 
          error,
          value
       } = searchesCreateSchema.validate({
-         ...ctx.request.body,
+         ...getBody(ctx.request.body),
          clientId: ctx.state["user"].sub
       });
       if (error) {
@@ -20,13 +22,14 @@ export default class SelectSaveSearchParams extends BaseEventCollectionSelector 
       }
       const defaults = await this.getDefaults(ctx);
       const searchUrl = this.getSaveSearchUrl(ctx.body);
-      return {
+      const payload = {
          ...defaults,
          type: "Saved Property Search",
          pageUrl: defaults.pageReferrer,
          propertySearch: this.mapRplPropertySearchToBoss(value),
          description: searchUrl ? `Saved search url: ${searchUrl}` : undefined
-      };
+      } as BossEventsCreateRequest;
+      return payload;
    };
    isSearchModel(body: unknown): body is RplSaveSearch {
       return typeof body === "object" && body !== null && "searchId" in body;

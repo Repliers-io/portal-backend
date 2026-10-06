@@ -1,9 +1,9 @@
 import joi from "joi";
-import { BossUsersGetRequest } from "services/boss.js";
-import { RplAgentsCreateRequest } from "services/repliers/agents.js";
+import { BossUsersGetRequest } from "../services/boss.js";
+import { RplAgentsCreateRequest } from "../services/repliers/agents.js";
 export interface RplCreateAgentDto extends RplAgentsCreateRequest {}
 const adminCreateAgentSchemaKeys = {
-   externalId: joi.alternatives(joi.number().integer(), joi.string()),
+   externalId: joi.alternatives(joi.string(), joi.number().integer().cast("string")),
    fname: joi.string().required(),
    lname: joi.string().required(),
    phone: joi.string().required().min(10).max(20),

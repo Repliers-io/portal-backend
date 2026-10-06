@@ -62,6 +62,7 @@ export enum RplLastStatus {
    Pc = "Pc",
    Ext = "Ext",
    New = "New",
+   Cs = "Cs",
 }
 export enum RplOperator {
    AND = "AND",
@@ -69,13 +70,13 @@ export enum RplOperator {
 }
 
 /**
-* @openapi
-*  components:
-*     schemas:
-*        RplSimilarSortBy:
-*           type: string
-*           enum: [updatedOnDesc, updatedOnAsc, createdOnAsc, createdOnDesc]
-*/
+ * @openapi
+ *  components:
+ *     schemas:
+ *        RplSimilarSortBy:
+ *           type: string
+ *           enum: [updatedOnDesc, updatedOnAsc, createdOnAsc, createdOnDesc]
+ */
 export enum RplSimilarSortBy {
    "updatedOnDesc" = "updatedOnDesc",
    "updatedOnAsc" = "updatedOnAsc",
@@ -83,33 +84,46 @@ export enum RplSimilarSortBy {
    "createdOnDesc" = "createdOnDesc",
 }
 export enum RplSortBy {
-   "createdOnDesc" = "createdOnDesc",
-   "updatedOnDesc" = "updatedOnDesc",
-   "createdOnAsc" = "createdOnAsc",
-   "distanceAsc" = "distanceAsc",
-   "distanceDesc" = "distanceDesc",
-   "updatedOnAsc" = "updatedOnAsc",
-   "soldDateAsc" = "soldDateAsc",
-   "soldDateDesc" = "soldDateDesc",
-   "soldPriceAsc" = "soldPriceAsc",
-   "soldPriceDesc" = "soldPriceDesc",
-   "sqftAsc" = "sqftAsc",
-   "sqftDesc" = "sqftDesc",
-   "listPriceAsc" = "listPriceAsc",
-   "listPriceDesc" = "listPriceDesc",
-   "bedsAsc" = "bedsAsc",
-   "bedsDesc" = "bedsDesc",
-   "bathsDesc" = "bathsDesc",
-   "bathsAsc" = "bathsAsc",
-   "yearBuiltDesc" = "yearBuiltDesc",
-   "yearBuiltAsc" = "yearBuiltAsc",
-   "random" = "random",
+   createdOnDesc = "createdOnDesc",
+   updatedOnDesc = "updatedOnDesc",
+   createdOnAsc = "createdOnAsc",
+   distanceAsc = "distanceAsc",
+   distanceDesc = "distanceDesc",
+   updatedOnAsc = "updatedOnAsc",
+   soldDateAsc = "soldDateAsc",
+   soldDateDesc = "soldDateDesc",
+   soldPriceAsc = "soldPriceAsc",
+   soldPriceDesc = "soldPriceDesc",
+   sqftAsc = "sqftAsc",
+   sqftDesc = "sqftDesc",
+   listPriceAsc = "listPriceAsc",
+   listPriceDesc = "listPriceDesc",
+   bedsAsc = "bedsAsc",
+   bedsDesc = "bedsDesc",
+   bathsDesc = "bathsDesc",
+   bathsAsc = "bathsAsc",
+   yearBuiltDesc = "yearBuiltDesc",
+   yearBuiltAsc = "yearBuiltAsc",
+   random = "random",
    statusAscListDateAsc = "statusAscListDateAsc",
    statusAscListDateDesc = "statusAscListDateDesc",
    statusAscListPriceAsc = "statusAscListPriceAsc",
    statusAscListPriceDesc = "statusAscListPriceDesc",
+   repliersUpdatedOnAsc = "repliersUpdatedOnAsc",
+   repliersUpdatedOnDesc = "repliersUpdatedOnDesc",
    qualityAsc = "qualityAsc",
    qualityDesc = "qualityDesc",
+   listPricePerSqFtAsc = "listPricePerSqFtAsc",
+   listPricePerSqFtDesc = "listPricePerSqFtDesc",
+   soldPricePerSqFtAsc = "soldPricePerSqFtAsc",
+   soldPricePerSqFtDesc = "soldPricePerSqFtDesc",
+   closedDateAsc = "closedDateAsc",
+   closedDateDesc = "closedDateDesc",
+   centroidDistanceAsc = "centroidDistanceAsc",
+   centroidDistanceDesc = "centroidDistanceDesc",
+}
+export enum RplBuildingsSortBy {
+   numUnitsDesc = "numUnitsDesc",
 }
 export enum RplStatistics {
    "avg-daysOnMarket" = "avg-daysOnMarket",
@@ -144,4 +158,15 @@ export enum RplType {
    Sale = "sale",
    Lease = "lease",
 }
+export const RplBooleanValues = ["false", "true"] as const;
+export type RplBoolean = (typeof RplBooleanValues)[number];
+export const RplStandardStatusValues = ["Active", "Active Under Contract", "Canceled", "Closed", "Coming Soon", "Delete", "Expired", "Hold", "Incomplete", "Pending", "Withdrawn"] as const;
+export type RplStandardStatus = (typeof RplStandardStatusValues)[number];
+export const RplLastPriceChangeTypeValues = ["decrease", "increase"] as const;
+export type RplLastPriceChangeType = (typeof RplLastPriceChangeTypeValues)[number];
 export type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;
+export type RplCoordinate = [number, number];
+export type RplLocationPolygon = RplCoordinate[];
+
+// An array of polygons with at least one item
+export type RplLocationMap = [RplLocationPolygon, ...RplLocationPolygon[]];

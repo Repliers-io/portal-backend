@@ -1,11 +1,10 @@
 import { OAuthProviders, UserRole } from "../constants.js";
 import type { AppConfig } from "../config.js";
-import { Client } from "openid-client";
+import { Configuration, buildAuthorizationUrl, authorizationCodeGrant } from "openid-client";
 import { container, inject, injectable } from "tsyringe";
 import { ApiError } from "../lib/errors.js";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import AuthService, { agentProfilKeys, AuthResponseDto, userProfilKeys } from "./auth.js";
-import { IncomingMessage } from "http";
 import RepliersClients, { RplClientsClient } from "./repliers/clients.js";
 import RepliersAgents, { RplAgentsAgent } from "./repliers/agents.js";
 import OAuthGoogleAdapter from "./oauth/google.js";
@@ -28,23 +27,42 @@ export default class OAuthService {
       facebook: container.resolve(OAuthFacebookAdapter),
       google: container.resolve(OAuthGoogleAdapter)
    };
-   public async url(provider: OAuthProviders) {
-      const client = await container.resolve<Promise<Client>>(`oauth.${provider}`);
+   public async url(provider: OAuthProviders, uri?: string) {
+      const clientConfig = await container.resolve<Promise<Configuration>>(`oauth.${provider}`);
       const scopes = this.config.auth.oauth[provider].scopes;
-      return client.authorizationUrl({
-         scope: scopes
+      // If no uri provided, use the first one from config, should be the only one in most cases
+      const redirect_uri = uri || this.config.auth.oauth[provider].redirect_uri.at(0);
+      if (!redirect_uri) {
+         throw new ApiError(`A redirect_uri is not configured for ${provider}, and none was supplied in the request query`, 400);
+      }
+      return buildAuthorizationUrl(clientConfig, {
+         scope: scopes,
+         redirect_uri
       });
    }
-   public async callback(provider: OAuthProviders, req: IncomingMessage): Promise<AuthResponseDto> {
+   public async callback(provider: OAuthProviders, params: {
+      code: string;
+      uri: string | undefined;
+   }): Promise<AuthResponseDto> {
       debug("callback for %s", provider);
-      const client = await container.resolve<Promise<Client>>(`oauth.${provider}`);
-      const params = client.callbackParams(req);
-      const redirectUri = this.config.auth.oauth[provider].redirect_uri;
-      const tokens = await client.callback(redirectUri, params);
+      const clientConfig = await container.resolve<Promise<Configuration>>(`oauth.${provider}`);
+
+      // if not passed as query param, use first from config, for backward compatability for old clients
+      const redirectUri = params.uri || this.config.auth.oauth[provider].redirect_uri.at(0) || "";
+      const url = new URL(redirectUri);
+      url.search = new URLSearchParams({
+         iss: "https://accounts.google.com",
+         // needed for google, but doesn't affect other providers
+         code: params.code
+      }).toString(); // convert to mutable
+
+      const tokens = await authorizationCodeGrant(clientConfig, url, {
+         idTokenExpected: true
+      });
       if (!tokens.id_token) {
          this.logger.error({
             data: {
-               req
+               params
             }
          }, `400 - [OAuthService: callback]:  No id_token recieved from ${provider}, probably insufficient scopes configured for app`);
          throw new ApiError(`No id_token recieved from ${provider}, probably insufficient scopes configured for app`, 400);
@@ -52,12 +70,12 @@ export default class OAuthService {
       const userInfo = jwt.decode(tokens.id_token, {
          json: true
       });
-      if (!userInfo) {
+      if (!userInfo || !userInfo["email"]) {
          this.logger.error({
             data: {
-               req
+               params
             }
-         }, "400 - [OAuthService: callback]: Cant decode id_token from ${provider}");
+         }, `400 - [OAuthService: callback]: Cant decode id_token from ${provider}`);
          throw new ApiError(`Cant decode id_token from ${provider}`, 400);
       }
       debug("userInfo: %O", userInfo);
@@ -101,7 +119,7 @@ export default class OAuthService {
       };
    }
    private getAgentWithEmail(email: string, agents: RplAgentsAgent[]) {
-      return agents.find(agent => agent.email.toLowerCase() === email.toLowerCase());
+      return agents.find(agent => agent.email?.toLowerCase() === email.toLowerCase());
    }
    private async agentLogin(agent: RplAgentsAgent) {
       const fubUser = await this.boss.getUsers({
@@ -124,14 +142,18 @@ export default class OAuthService {
       };
    }
    private async reportClientRegistration(user: RplClientsClient, provider: string) {
-      const params = await this.registerClientSelector.select({
-         user,
-         provider
-      });
-      if (!params) {
-         debug("reportClientRegistration: params is null");
-         return;
+      try {
+         const params = await this.registerClientSelector.select({
+            user,
+            provider
+         });
+         if (!params) {
+            debug("reportClientRegistration: params is null");
+            return;
+         }
+         this.eventsCollection.eventsCreate(params);
+      } catch (err) {
+         this.logger.error(err, "reportClientRegistration failed");
       }
-      this.eventsCollection.eventsCreate(params);
    }
 }

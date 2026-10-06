@@ -7,6 +7,7 @@ import { UserRole } from "../constants.js";
 import { vtourCreateSchema, vtourRemoveSchema, vtourSlugSchema, vtourUpdateSchema } from "../validate/vtour.js";
 import VtourService from "../services/vtour.js";
 import { Context } from "koa";
+import { getBody } from "../lib/utils.js";
 const router = new Router({
    prefix: "/vtour"
 });
@@ -82,7 +83,7 @@ router.post("/", authMiddleware, roleMiddleware([UserRole.Admin, UserRole.Root])
       error,
       value
    } = vtourCreateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       owner_id: ctx.state['user'].sub
    });
    if (error) {
@@ -176,7 +177,7 @@ router.put("/:slug", authMiddleware, roleMiddleware([UserRole.Admin, UserRole.Ro
       error,
       value
    } = vtourUpdateSchema.validate({
-      ...ctx.request.body,
+      ...getBody(ctx.request.body),
       id: ctx.params['slug'],
       user_id: ctx.state['user'].sub,
       role: ctx.state['user'].role,

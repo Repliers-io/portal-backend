@@ -26,8 +26,16 @@ export default {
       const nc = await connect(natsOptions);
       const jsm = await jetstreamManager(nc);
       for (const settings of streams) {
-         await jsm.streams.add(settings.stream);
-         await jsm.consumers.add(settings.stream.name, settings.consumer);
+         const streamExists = await jsm.streams.info(settings.stream.name).then(() => true).catch(() => false);
+         if (streamExists) {
+            await jsm.streams.update(settings.stream.name, settings.stream);
+         } else {
+            await jsm.streams.add(settings.stream);
+         }
+         const consumerExists = await jsm.consumers.info(settings.stream.name, settings.consumer.durable_name).then(() => true).catch(() => false);
+         if (!consumerExists) {
+            await jsm.consumers.add(settings.stream.name, settings.consumer);
+         }
       }
       const logger = container.resolve<Logger>("logger.global");
       return pRetry(() => jetstream(nc), {

@@ -1,30 +1,39 @@
 import nock from "nock";
 import config from "../../../src/config.js";
 import dayjs from "dayjs";
-import { RplDateFormatter, RplStatus, RplType } from "../../../src/types/repliers.js";
+import utc from "dayjs/plugin/utc.js";
+import { RplDateFormatter, RplType, RplYesNo } from "../../../src/types/repliers.js";
+dayjs.extend(utc);
 const rewriteDates = (data: Record<string, unknown>) => {
    const toDate = '2024-08-06';
-   const diff = dayjs().diff(toDate, "days");
+   const diff = dayjs().utc().diff(dayjs.utc(toDate), "days");
    const result = {};
    for (const [key, value] of Object.entries(data)) {
       const [start, end] = key.split('_');
-      const shiftedStart = dayjs(start).add(diff, 'days').format(RplDateFormatter);
-      const shiftedEnd = dayjs(end).add(diff, 'days').format(RplDateFormatter);
+      const shiftedStart = dayjs.utc(start).add(diff, 'days').format(RplDateFormatter);
+      const shiftedEnd = dayjs.utc(end).add(diff, 'days').format(RplDateFormatter);
       result[`${shiftedStart}_${shiftedEnd}`] = value;
    }
    return result;
 };
+
+// Every RepliersListings.search() carries these on top of the caller's params. The test
+// instance declares an allowed standardStatus set, so the sold filter is the RESO one.
+const searchQuery = (params: Record<string, unknown>) => ({
+   listings: false,
+   type: RplType.Sale,
+   standardStatus: "Closed",
+   class: "residential",
+   displayInternetEntireListing: RplYesNo.Y,
+   ...params
+});
 export const mockNbStats = () => {
    // Cumberland
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
-      type: RplType.Sale,
-      status: RplStatus.U,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-30-days",
-      class: "residential",
-      minSoldDate: dayjs().subtract(60, "days").format(RplDateFormatter),
+      minSoldDate: dayjs().utc().subtract(60, "days").format(RplDateFormatter),
       district: [1110, 1113, 1114, 1115, 1116]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 1,
       pageSize: 100,
@@ -50,16 +59,11 @@ export const mockNbStats = () => {
       },
       listings: []
    });
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
-      type: RplType.Sale,
-      status: RplStatus.U,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-90-days",
-      class: "residential",
-      minSoldDate: dayjs().subtract(180, "days").format(RplDateFormatter),
-      // updated to use RplDateFormatter
+      minSoldDate: dayjs().utc().subtract(180, "days").format(RplDateFormatter),
       district: [1110, 1113, 1114, 1115, 1116]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 1,
       pageSize: 100,
@@ -85,15 +89,11 @@ export const mockNbStats = () => {
       },
       listings: []
    });
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-365-days",
-      type: RplType.Sale,
-      status: RplStatus.U,
-      class: "residential",
-      minSoldDate: dayjs().subtract(2, "year").format(RplDateFormatter),
+      minSoldDate: dayjs().utc().subtract(2, "year").format(RplDateFormatter),
       district: [1110, 1113, 1114, 1115, 1116]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 2,
       pageSize: 100,
@@ -121,16 +121,11 @@ export const mockNbStats = () => {
    });
 
    // Orleans East
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-30-days",
-      type: RplType.Sale,
-      status: RplStatus.U,
-      class: "residential",
-      minSoldDate: dayjs().subtract(60, "days").format(RplDateFormatter),
-      // updated to use RplDateFormatter
+      minSoldDate: dayjs().utc().subtract(60, "days").format(RplDateFormatter),
       district: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1117, 1118, 1119]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 2,
       pageSize: 100,
@@ -156,15 +151,11 @@ export const mockNbStats = () => {
       },
       listings: []
    });
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-90-days",
-      type: "sale",
-      status: "U",
-      class: "residential",
-      minSoldDate: dayjs().subtract(180, "days").format(RplDateFormatter),
+      minSoldDate: dayjs().utc().subtract(180, "days").format(RplDateFormatter),
       district: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1117, 1118, 1119]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 6,
       pageSize: 100,
@@ -190,16 +181,11 @@ export const mockNbStats = () => {
       },
       listings: []
    });
-   nock(config.repliers.base_url).get("/listings").query({
-      listings: false,
+   nock(config.repliers.base_url).get("/listings").query(searchQuery({
       statistics: "avg-soldPrice,grp-365-days",
-      type: "sale",
-      status: "U",
-      class: "residential",
-      minSoldDate: dayjs().subtract(2, "year").format(RplDateFormatter),
-      // updated to use RplDateFormatter
+      minSoldDate: dayjs().utc().subtract(2, "year").format(RplDateFormatter),
       district: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1117, 1118, 1119]
-   }).reply(200, {
+   })).reply(200, {
       page: 1,
       numPages: 16,
       pageSize: 100,

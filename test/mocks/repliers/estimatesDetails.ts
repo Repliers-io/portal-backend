@@ -100,3 +100,10 @@ export const mockAverageTax = (status: number = 200, response: any = {
       return queryObject.statistics === 'med-tax';
    }).reply(status, response);
 };
+export const mockClientEstimatesGet = (clientId: number, estimates: unknown[] = []) => {
+   nock(config.repliers.base_url).get("/estimates").query(queryObject => {
+      return queryObject.clientId === String(clientId);
+   }).reply(200, {
+      estimates
+   });
+};

@@ -1,0 +1,23 @@
+name: repliers_backend
+services:
+    nats:
+        # container_name: repliers_nats
+        ports:
+            - 4222:4222
+            - 6222:6222
+            - 8222:8222
+        image: nats:2-alpine
+        command: -js
+    redis:
+        ports:
+            - 6379:6379
+        # container_name: repliers_redis
+        image: redis:8-alpine
+    postgres:
+        # container_name: repliers_pg
+        environment:
+            - POSTGRES_PASSWORD=postgrespw
+            - POSTGRES_DB=repliers
+        ports:
+            - ${DB_PORT:-5432}:5432
+        image: postgres:16-alpine

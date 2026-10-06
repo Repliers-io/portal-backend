@@ -4,14 +4,40 @@ import utc from 'dayjs/plugin/utc.js';
 import _ from "lodash";
 import _debug from "debug";
 import type { StatsCommunitiesDto, StatsNeighborhoodsrankingDto, StatsWidgetsDto } from "../validate/stats.js";
-import RepliersListings, { RplListingsSearchResponse, RplRollingPeriodName, StatsMoment } from "./repliers/listings.js";
-import { RplDateFormat, RplDateFormatter, RplMonthFormat, RplStatus, RplType } from "../types/repliers.js";
+import RepliersListings, { RplListingsSearchResponse, RplRollingPeriodName, StatsCount, StatsFull, StatsMoment, StatsMomentCount } from "./repliers/listings.js";
+import { RplDateFormat, RplDateFormatter, RplMonthFormat, RplStandardStatus, RplStatus, RplType } from "../types/repliers.js";
 import { AppConfig } from "../config.js";
 import cached, { Cached } from "../lib/decorators/cached.js";
 import type { DataCommunities } from "./stats/communities.js";
 const debug = _debug("repliers:services:stats");
 dayjs.extend(utc);
 const config = container.resolve<AppConfig>("config");
+
+// Repliers answers 400 to `standardStatus` combined with `status`/`lastStatus`, and an instance
+// with an allowed RESO set gets `standardStatus` applied to every query — so these filters have to
+// be written in whichever vocabulary the instance speaks.
+const reso = Boolean(config.settings.allowedListingsStandardStatuses?.length);
+const statusFilters = {
+   sold: reso ? {
+      standardStatus: ["Closed"]
+   } : {
+      status: [RplStatus.U]
+   },
+   active: reso ? {
+      standardStatus: ["Active"]
+   } : {
+      status: [RplStatus.A]
+   },
+   activeOrSold: reso ? {
+      standardStatus: ["Active", "Closed"]
+   } : {
+      status: [RplStatus.A, RplStatus.U]
+   }
+} satisfies Record<string, {
+   status: RplStatus[];
+} | {
+   standardStatus: RplStandardStatus[];
+}>;
 interface FetchStats {
    neighborhood: string;
    monthlyChange: PeriodAvgStats;
@@ -71,7 +97,7 @@ export default class StatsService {
       const statParams = {
          ...widgetParams,
          statistics: "avg-soldPrice,med-soldPrice,sum-soldPrice,avg-daysOnMarket,med-daysOnMarket",
-         status: [RplStatus.U]
+         ...statusFilters.sold
       };
       const [monthResult, threeMonthResult, yearResult, activeResult, newResult, soldPerMonthResult] = await Promise.all([this.repliers.search({
          ...statParams,
@@ -87,22 +113,30 @@ export default class StatsService {
          statistics: statParams.statistics + ',grp-365-days'
       }), this.repliers.search({
          ...widgetParams,
-         status: [RplStatus.A]
+         ...statusFilters.active
       }), this.repliers.search({
          ...widgetParams,
          minListDate: periods.historyMinDate,
          statistics: "cnt-new,grp-mth",
-         status: [RplStatus.A, RplStatus.U]
+         ...statusFilters.activeOrSold
       }), this.repliers.search({
          ...statParams,
          minSoldDate: periods.historyMinDate,
          statistics: statParams.statistics + ',grp-mth'
       })]);
+
+      // Repliers omits any statistics block that has no matching listings.
+      const monthStats = monthResult.statistics ?? {};
+      const threeMonthStats = threeMonthResult.statistics ?? {};
+      const yearStats = yearResult.statistics ?? {};
+      const newMth: Partial<Record<RplMonthFormat, StatsCount>> = newResult.statistics?.new?.mth ?? {};
+      const soldMth: Partial<Record<RplMonthFormat, StatsFull>> = soldPerMonthResult.statistics?.soldPrice?.mth ?? {};
+      const domMth: Partial<Record<RplMonthFormat, StatsMomentCount>> = soldPerMonthResult.statistics?.daysOnMarket?.mth ?? {};
       const newListingsCount = months.reduce((acc: Record<RplMonthFormat, {
          value: number | undefined;
       }>, month) => {
          acc[month] = {
-            value: newResult.statistics.new.mth[month]?.count
+            value: newMth[month]?.count
          };
          return acc;
       }, {});
@@ -110,21 +144,29 @@ export default class StatsService {
          value: number | undefined;
       }>, month) => {
          acc[month] = {
-            value: soldPerMonthResult.statistics.soldPrice.mth[month]?.count
+            value: soldMth[month]?.count
          };
          return acc;
       }, {});
       const soldPerMonthMoment = months.reduce((acc: Record<RplMonthFormat, StatsMoment>, month) => {
          acc[month] = {
-            avg: soldPerMonthResult.statistics.soldPrice.mth[month]?.avg || 0,
-            med: soldPerMonthResult.statistics.soldPrice.mth[month]?.med || 0
+            avg: soldMth[month]?.avg || 0,
+            med: soldMth[month]?.med || 0
          };
          return acc;
       }, {});
       const domMoment = months.reduce((acc: Record<RplMonthFormat, StatsMoment>, month) => {
          acc[month] = {
-            avg: soldPerMonthResult.statistics.daysOnMarket.mth[month]?.avg || 0,
-            med: soldPerMonthResult.statistics.daysOnMarket.mth[month]?.med || 0
+            avg: domMth[month]?.avg || 0,
+            med: domMth[month]?.med || 0
+         };
+         return acc;
+      }, {});
+      const volumePerMonth = months.reduce((acc: Record<RplMonthFormat, {
+         value: number | undefined;
+      }>, month) => {
+         acc[month] = {
+            value: soldMth[month]?.sum || 0
          };
          return acc;
       }, {});
@@ -139,16 +181,16 @@ export default class StatsService {
             sold: {
                prices: {
                   month: {
-                     avg: monthResult.statistics.soldPrice.avg,
-                     med: monthResult.statistics.soldPrice.med
+                     avg: monthStats.soldPrice?.avg,
+                     med: monthStats.soldPrice?.med
                   },
                   threeMonth: {
-                     avg: threeMonthResult.statistics.soldPrice.avg,
-                     med: threeMonthResult.statistics.soldPrice.med
+                     avg: threeMonthStats.soldPrice?.avg,
+                     med: threeMonthStats.soldPrice?.med
                   },
                   year: {
-                     avg: yearResult.statistics.soldPrice.avg,
-                     med: yearResult.statistics.soldPrice.med
+                     avg: yearStats.soldPrice?.avg,
+                     med: yearStats.soldPrice?.med
                   },
                   mth: {
                      ...soldPerMonthMoment
@@ -156,13 +198,16 @@ export default class StatsService {
                },
                volume: {
                   month: {
-                     value: monthResult.statistics.soldPrice.sum
+                     value: monthStats.soldPrice?.sum
                   },
                   threeMonth: {
-                     value: threeMonthResult.statistics.soldPrice.sum
+                     value: threeMonthStats.soldPrice?.sum
                   },
                   year: {
-                     value: yearResult.statistics.soldPrice.sum
+                     value: yearStats.soldPrice?.sum
+                  },
+                  mth: {
+                     ...volumePerMonth
                   }
                },
                count: {
@@ -181,16 +226,16 @@ export default class StatsService {
                },
                dom: {
                   month: {
-                     avg: monthResult.statistics.daysOnMarket.avg,
-                     med: monthResult.statistics.daysOnMarket.med
+                     avg: monthStats.daysOnMarket?.avg,
+                     med: monthStats.daysOnMarket?.med
                   },
                   threeMonth: {
-                     avg: threeMonthResult.statistics.daysOnMarket.avg,
-                     med: threeMonthResult.statistics.daysOnMarket.med
+                     avg: threeMonthStats.daysOnMarket?.avg,
+                     med: threeMonthStats.daysOnMarket?.med
                   },
                   year: {
-                     avg: yearResult.statistics.daysOnMarket.avg,
-                     med: yearResult.statistics.daysOnMarket.med
+                     avg: yearStats.daysOnMarket?.avg,
+                     med: yearStats.daysOnMarket?.med
                   },
                   mth: {
                      ...domMoment
@@ -223,9 +268,12 @@ export default class StatsService {
          avgPrevPeriod,
          key
       });
-      debug(`stats.statistics.soldPrice[${key}]:`, stats.statistics.soldPrice[key]);
-      const avgCurr = stats.statistics.soldPrice[key][avgCurrPeriod]!.avg;
-      const avgPrev = stats.statistics.soldPrice[key][avgPrevPeriod]!.avg;
+      const periods = stats.statistics?.soldPrice?.[key];
+      debug(`stats.statistics.soldPrice[${key}]:`, periods);
+
+      // A missing bucket means no sales in that window; 0 feeds the no-change branch below.
+      const avgCurr = periods?.[avgCurrPeriod]?.avg ?? 0;
+      const avgPrev = periods?.[avgPrevPeriod]?.avg ?? 0;
       let change: number;
       // If no data for prev or curr month, than treat it as no-change
       if (avgPrev === 0 || avgCurr === 0) {
@@ -247,7 +295,7 @@ export default class StatsService {
          const statsParams = {
             listings: false,
             type: [RplType.Sale],
-            status: [RplStatus.U],
+            ...statusFilters.sold,
             class: params.class,
             // city: [params.city],
             district

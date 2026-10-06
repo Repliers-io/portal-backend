@@ -10,3 +10,7 @@ keys
 coverage
 .history
 test-results
+
+.claude/settings.json
+.claude/settings.local.json
+/logs

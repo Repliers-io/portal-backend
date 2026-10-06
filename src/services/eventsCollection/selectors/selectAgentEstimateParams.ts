@@ -6,7 +6,8 @@ import RepliersService from "../../../services/repliers.js";
 import { type AppConfig } from "../../../config.js";
 import UserService from "../../../services/user.js";
 import RepliersAgents from "../../../services/repliers/agents.js";
-import BossService from "../../../services/boss.js";
+import BossService, { BossEventsCreateRequest } from "../../../services/boss.js";
+import { getBody } from "../../../lib/utils.js";
 const debug = _debug("repliers:services:SelectAgentEstimateParams");
 @injectable()
 export default class SelectAgentEstimateParams extends BaseEventCollectionSelector {
@@ -20,7 +21,7 @@ export default class SelectAgentEstimateParams extends BaseEventCollectionSelect
             error,
             value
          } = agentsCreateEstimateSchema.validate({
-            ...ctx.request.body,
+            ...getBody(ctx.request.body),
             clientId: ctx["params"].clientId,
             agentId: ctx.state["user"].sub
          });
@@ -34,7 +35,7 @@ export default class SelectAgentEstimateParams extends BaseEventCollectionSelect
          } = value;
          const price = this.isEstimateModel(ctx.response.body) ? ctx.response.body.estimate : undefined;
          const agentProps = await this.getAgent(value.agentId);
-         return {
+         const payload = {
             ...defaults,
             person: {
                ...defaults.person,
@@ -53,7 +54,8 @@ export default class SelectAgentEstimateParams extends BaseEventCollectionSelect
                area: this.stringifyIfSet(details?.sqft)
             },
             type: "Seller Inquiry"
-         };
+         } as BossEventsCreateRequest;
+         return payload;
       } catch (error) {
          debug("Fail to generate FUB params due to error %O", error);
          return null;
