@@ -1,19 +1,19 @@
 import { container, injectable } from "tsyringe";
 import RepliersService from "./repliers.js";
-import { FeaturedListingsResponse, RplFavoritesAddDto, RplFavoritesGetDto } from "./repliers/favorites.js";
+import { type FeaturedListingsResponse, RplFavoritesAddDto, RplFavoritesGetDto } from "./repliers/favorites.js";
 import { ApiError } from "../lib/errors.js";
 import cached, { Cached, getCacheStore, cacheKey } from "../lib/decorators/cached.ts";
 import { type AppConfig } from "../config.ts";
 import { RplSortBy } from "../types/repliers.js";
 import { scrubbed } from "./scrubber/listings.js";
 import { dropRestricted } from "./listings/listingHelpers.ts";
-import { RplListingsAppState } from "../validate/listings.ts";
+import type { RplListingsAppState } from "../validate/listings.ts";
 const config = container.resolve<AppConfig>("config");
 const featuredListingsNamespace = "favorites:featuredListings";
 type FeaturedListingsQuery = Omit<RplFavoritesGetDto, "clientId">;
 interface FeaturedListingsParams extends FeaturedListingsQuery {
    slug: string;
-   app_state?: RplListingsAppState;
+   app_state?: RplListingsAppState | undefined;
 }
 @injectable()
 export default class FavoritesService {
@@ -50,22 +50,38 @@ export default class FavoritesService {
       return result;
    }
 
-   // @scrubbed reads `app_state` from the first argument and scrubs the top-level
-   // `listings` per request. The @cached layer below stays user-agnostic
-   // (unscrubbed) — we unwrap its Cached result here so the scrubber runs on the
-   // response, not on the cached copy shared across users. Mirrors how the regular
-   // /search + /:mlsNumber listings are scrubbed (services/listings.ts).
-   @scrubbed("listings")
-   async featuredListings(params: FeaturedListingsParams): Promise<FeaturedListingsResponse> {
+   // The @cached layer is user-agnostic (unscrubbed); scrubbing runs per request
+   // on the unwrapped payload, which is then re-wrapped so the route can emit
+   // Cache-Control from `expires`. lat/long produce per-user, location-specific
+   // results, so they bypass the cache and are fetched fresh.
+   async featuredListings(params: FeaturedListingsParams): Promise<FeaturedListingsResponse | Cached<FeaturedListingsResponse>> {
       const {
          slug,
-         app_state: _appState,
+         app_state,
          ...query
       } = params;
-      // lat/long produce per-user, location-specific results, so they bypass the
-      // cache and are fetched fresh. Otherwise the result is cached by slug + sortBy.
       const data = query.lat || query.long ? await this.fetchFeaturedListings(slug, query) : query.sortBy ? await this.cachedFeaturedListings(slug, query.sortBy) : await this.cachedFeaturedListings(slug);
-      return "expires" in data ? (data as Cached<FeaturedListingsResponse>).result : data;
+      if ("expires" in data) {
+         const {
+            expires,
+            result
+         } = data as Cached<FeaturedListingsResponse>;
+         return {
+            expires,
+            result: await this.scrubFeaturedListings({
+               app_state
+            }, result)
+         };
+      }
+      return this.scrubFeaturedListings({
+         app_state
+      }, data);
+   }
+
+   // @scrubbed reads `app_state` from the first argument and scrubs `listings`.
+   @scrubbed("listings")
+   private async scrubFeaturedListings(_params: Pick<FeaturedListingsParams, "app_state">, response: FeaturedListingsResponse): Promise<FeaturedListingsResponse> {
+      return response;
    }
    @cached(featuredListingsNamespace, config.cache.featuredListings.ttl_ms)
    private async cachedFeaturedListings(slug: string, sortBy?: RplSortBy): Promise<FeaturedListingsResponse | Cached<FeaturedListingsResponse>> {

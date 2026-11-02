@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import utc from 'dayjs/plugin/utc.js';
 import _ from "lodash";
 import _debug from "debug";
-import type { StatsCommunitiesDto, StatsNeighborhoodsrankingDto, StatsWidgetsDto } from "../validate/stats.js";
+import type { StatsCommunitiesDto, StatsGraphDto, StatsNeighborhoodsrankingDto, StatsWidgetsDto } from "../validate/stats.js";
 import RepliersListings, { RplListingsSearchResponse, RplRollingPeriodName, StatsCount, StatsFull, StatsMoment, StatsMomentCount } from "./repliers/listings.js";
 import { RplDateFormat, RplDateFormatter, RplMonthFormat, RplStandardStatus, RplStatus, RplType } from "../types/repliers.js";
 import { AppConfig } from "../config.js";
@@ -64,6 +64,13 @@ export default class StatsService {
          sum += v[field];
       }
       return sum;
+   }
+
+   // Aggregates-only /listings/search. Same upstream call as ListingsService.search, so board,
+   // standardStatus and restricted-listing constraints apply; no listings come back, so no scrubbing.
+   @cached("graph", config.cache.statsgraph.ttl_ms)
+   async graph(params: StatsGraphDto): Promise<RplListingsSearchResponse | Cached<RplListingsSearchResponse>> {
+      return this.repliers.search(params, true);
    }
    @cached("widgets", config.cache.statswidget.ttl_ms)
    async widgets(params: StatsWidgetsDto): Promise<WidgetsReturn | Cached<WidgetsReturn>> {

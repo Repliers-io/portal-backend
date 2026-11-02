@@ -6,6 +6,7 @@ import { container } from "tsyringe";
 import app from "./app.js";
 import config from "./config.js";
 import BossWebhooksService from "./services/boss/webhook.js";
+import { refreshRestrictedListings } from "./services/listings/restrictedListingsSource.ts";
 const logger = container.resolve<Logger>("logger.global");
 
 // Observe only: Node still prints the stack to stderr (Heroku) and exits 1.
@@ -26,6 +27,7 @@ debug(`Starting server with config:`, config);
 http.createServer(app.callback()).listen(config.app.port, () => {
    logger.info(`Server is running on port ${config.app.port}`);
 });
+void refreshRestrictedListings(config, logger);
 const webhook = container.resolve(BossWebhooksService);
 await webhook.installHooks();
 process.on("SIGINT", () => {

@@ -185,7 +185,7 @@ export type RplListingsQuery = Omit<RplListingsDto, "body">;
 const listingsCountOmittedFields = ["fields", "app_state", "listings", "resultsPerPage", "pageNum", "sortBy"];
 export interface RplListingsCountDto extends Omit<RplListingsSearchDto, typeof listingsCountOmittedFields[number]> {}
 export type RplListingsCountArrayDto = RplListingsCountDto[];
-const listingSearchSchemaKeys = {
+export const listingSearchSchemaKeys = {
    app_state: appStateSchema,
    activeMaxListDate: dateSchema,
    activeMinListDate: dateSchema,
@@ -364,7 +364,7 @@ const listingQuerySchema = joi.object<RplListingsQuery>().keys({
    ..._.omit(listingSearchSchemaKeys, "app_state"),
    boardId: joi.array().items(joi.number()).single() // no default — only the top-level request is boarded
 }).pattern(/^raw\./, joi.string());
-const listingBodySchema = joi.object().keys({
+export const listingBodySchema = joi.object().keys({
    imageSearchItems: joi.array().items(joi.object().keys({
       type: joi.string().required(),
       value: joi.string(),
@@ -500,3 +500,15 @@ export interface ListingsFeaturedDto {
    lat?: string;
    long?: string;
 }
+
+// Answer of the remote restricted-listings source. An empty list or a number in another format (board-prefixed,
+// lowercased) would unblock every listing, so both are rejected; the pattern also keeps values safe to write into a preset.
+export const listingsRestrictedSchema = joi.object<{
+   listings: {
+      mlsNumber: string;
+   }[];
+}>({
+   listings: joi.array().items(joi.object({
+      mlsNumber: joi.string().trim().pattern(/^[A-Z0-9]+$/).required()
+   }).unknown()).min(1).max(1000).required()
+}).unknown().required();

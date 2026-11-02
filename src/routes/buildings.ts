@@ -248,6 +248,7 @@ router.get("/:addressKey", async ctx => {
       ctx.throw(new ApiError(error.message, 400));
       return;
    }
-   ctx.body = await buildingsService.single(value.addressKey);
+   const data = await buildingsService.single(value.addressKey);
+   sendCached(ctx, data);
 });
 export default router;
