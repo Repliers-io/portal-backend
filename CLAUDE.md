@@ -14,14 +14,21 @@ npm run dev                        # Start server + worker
 npm run dev:server                 # Server only
 npm run dev:[project]              # Run with a project's .env.<project> config
 
-# Testing
-npm run test:localhost             # Tests with local DB on port 5555
-npm run test:localhost:watch       # Watch mode
-npm run test:localhost:watch:grep "pattern"  # Run specific tests (watch mode)
+# Testing — needs the test Postgres on port 5555: `docker compose up -d postgres && npm run db:migrate:test`.
+# Without it exactly two tests fail with "Acquire connection error: ECONNREFUSED" (auth signup, oauth callback).
+npm run test:local                 # Full suite with local DB on port 5555
+npm run test:local:watch           # Watch mode
+npm run test:local:watch:grep "pattern"  # Run specific tests (watch mode)
 
-# Run specific tests (single run) — npm run test:localhost -- --grep doesn't forward
-# through nested npm calls, so use the direct command:
-npx cross-env DB_PORT=5555 NODE_ENV=testing DOT_ENV_CONFIG=test.env npx mocha --grep "pattern"
+# Run specific tests (single run) — npm run test:local -- --grep doesn't forward through nested
+# npm calls, and the agent permission policy denies `npx ...` and `npm exec ...` outright
+# (only `npm run <script>` and `node <file>` are allowed). Run the binaries through node instead.
+# --grep is case-sensitive; --exit stops a test that leaks a handle from hanging the process.
+DB_PORT=5555 NODE_ENV=testing DOT_ENV_CONFIG=test.env node node_modules/mocha/bin/mocha.js --exit --grep "pattern"
+
+# Type-check (same restriction: not `npx tsc`). tsconfig only includes src/, so test/ and scripts/ are
+# type-checked only by the mocha loader at run time.
+node node_modules/typescript/bin/tsc --noEmit
 
 # Database
 npm run db:migrate                 # Run migrations
@@ -33,7 +40,7 @@ DEBUG=repliers:* npm run dev       # Enable debug logging
 
 ## Multi-Project / Tenant Model
 
-A **project** is a deployment configuration preset: `src/settings/defaults.ts`, or one file per deployment in `src/settings/instances/` (list the folder for the current set). Each preset maps to a real estate market/MLS board and is selected via the `APP_SETTINGS_PRESET` env var at startup. Settings are **immutable at runtime** — they cannot be changed per-request. At startup the preset is merged over the env-built config (`_.mergeWith` in `src/lib/settings.ts`), so a value set in the preset beats its env var; presets do not stack on `defaults`.
+A **project** is a deployment configuration preset: `src/settings/defaults.ts`, or one file per deployment in `src/settings/instances/` (list the folder for the current set). Each preset maps to a real estate market/MLS board and is selected via the `APP_SETTINGS_PRESET` env var at startup. Settings are **immutable at runtime** — they cannot be changed per-request. One exception: `settings.restrictedListings` is swapped once, in the background, by the startup refresh from its remote source (`docs/architecture/restricted-listings.md`). At startup the preset is merged over the env-built config (`_.mergeWith` in `src/lib/settings.ts`), so a value set in the preset beats its env var; presets do not stack on `defaults`.
 
 Each preset configures: boardId(s) to query, proximity search center (lat/long/radius), Mapbox country/region filtering, allowed location areas, Follow Up Boss enabled/disabled, scrubbing rules, and cache TTLs.
 
@@ -296,6 +303,16 @@ Browser →              router → portal-backend     # no CDN in front of the 
 `getClientIpBehindSSR` walks the offset down until it is in bounds, which is what lets a single offset serve both shapes — do not "fix" it to fail closed without checking every deployment first. The non-SSR branch takes the last entry, which is correct only while nothing sits between the browser and this process; put a CDN in front of the backend and it starts forwarding the CDN's edge IP as the end user.
 
 An SSR-token request that arrives with no real client in the chain is a frontend bug, not a topology to accommodate: the caller should send `XFF_SSG_TOKEN` instead when there is no user behind the render (build, ISR regeneration, warm-up scripts).
+
+**Restricted listings remote source:**
+
+```text
+RESTRICTED_LISTINGS_SOURCE_URL         # Endpoint answering { listings: [{ mlsNumber }] } (default: "", i.e. off)
+RESTRICTED_LISTINGS_SOURCE_TOKEN_URL   # Issues a bearer token from { email, password } (default: "", i.e. no auth)
+RESTRICTED_LISTINGS_SOURCE_EMAIL
+RESTRICTED_LISTINGS_SOURCE_PASSWORD
+RESTRICTED_LISTINGS_SOURCE_TIMEOUT_MS  # Per HTTP call (default: 10000)
+```
 
 **Scrubbing:**
 

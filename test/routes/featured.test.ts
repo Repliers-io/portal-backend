@@ -53,6 +53,8 @@ describe("Featured Listings", function () {
       assert.equal(res.body.count, 2);
       assert.equal(res.body.listings.length, 2);
       assert.equal(res.body.favorites, undefined);
+      assert.match(res.headers["cache-control"], /^private, max-age=\d+$/);
+      assert.ok(Number(res.headers["cache-control"].split("=")[1]) <= config.cache.featuredListings.ttl_ms / 1000);
    });
    it("should return 404 for unknown slug", async function () {
       const res = await setupApp().get("/api/listings/featured/nonexistent-slug");
@@ -203,6 +205,7 @@ describe("Featured Listings", function () {
             long: "20.0"
          });
          assert.equal(firstRes.body.count, 1);
+         assert.equal(firstRes.headers["cache-control"], undefined);
 
          // A second identical request must hit the API again (fresh response),
          // proving lat/long requests are not served from cache.

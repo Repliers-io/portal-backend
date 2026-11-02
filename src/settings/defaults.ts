@@ -51,6 +51,9 @@ export default {
       statswidget: {
          ttl_ms: 21_600_000 /** 6 hours */
       },
+      statsgraph: {
+         ttl_ms: 21_600_000 /** 6 hours */
+      },
       autosuggest_locations: {
          ttl_ms: 86_400_000 /** 24 hours */
       }

@@ -78,7 +78,10 @@ describe("Listings", function () {
          assert.equal(res.status, 200);
          assert.deepEqual(sentStatuses(sent.query["standardStatus"]), allowed);
       });
-      it("should apply the allowed set to unfiltered body.queries", async function () {
+
+      // Repliers answers 400 "Parameter conflict" when standardStatus is sent both at the
+      // top level and inside `queries`, so with a union it may live in the branches only.
+      it("should apply the allowed set to unfiltered body.queries only", async function () {
          const sent = mockSearch();
          const res = await setupApp().post("/api/listings/search").send({
             queries: [{
@@ -87,6 +90,20 @@ describe("Listings", function () {
          });
          assert.equal(res.status, 200);
          assert.deepEqual(sent.body.queries?.map(query => query["standardStatus"]), [allowed]);
+         assert.equal(sent.query["standardStatus"], undefined);
+      });
+      it("should move a top-level status into every body.queries branch", async function () {
+         const sent = mockSearch();
+         const res = await setupApp().post("/api/listings/search?standardStatus=Closed").send({
+            queries: [{
+               officeId: "A"
+            }, {
+               "raw.BuyerOfficeKey": "A"
+            }]
+         });
+         assert.equal(res.status, 200);
+         assert.deepEqual(sent.body.queries?.map(query => query["standardStatus"]), [["Closed"], ["Closed"]]);
+         assert.equal(sent.query["standardStatus"], undefined);
       });
       it("should drop statuses outside the allowed set", async function () {
          const sent = mockSearch();
@@ -114,6 +131,7 @@ describe("Listings", function () {
          });
          assert.equal(res.status, 200);
          assert.deepEqual(sent.body.queries?.map(query => query["standardStatus"]), [["Pending"], allowed]);
+         assert.equal(sent.query["standardStatus"], undefined);
       });
    });
 

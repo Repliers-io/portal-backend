@@ -212,3 +212,32 @@ export const mockNbStats = () => {
       listings: []
    });
 };
+
+/** Single-use mock of the POST /listings call behind /stats/graph; captures what was sent. */
+export const mockGraphSearch = (reply: Record<string, unknown>) => {
+   const sent: {
+      query: Record<string, unknown>;
+      body: Record<string, unknown>;
+   } = {
+      query: {},
+      body: {}
+   };
+   const scope = nock(config.repliers.base_url).post("/listings").query(query => {
+      sent.query = query;
+      return true;
+   }).once().reply(200, (_uri, body) => {
+      sent.body = body as Record<string, unknown>;
+      return {
+         page: 1,
+         numPages: 1,
+         pageSize: 100,
+         count: 0,
+         listings: [],
+         ...reply
+      };
+   });
+   return {
+      sent,
+      scope
+   };
+};

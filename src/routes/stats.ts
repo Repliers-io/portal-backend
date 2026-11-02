@@ -3,7 +3,7 @@ import { container } from "tsyringe";
 import { ApiError } from "../lib/errors.js";
 import { sendCached } from "../lib/decorators/cached.js";
 import StatsService from "../services/stats.js";
-import { statsCommunitiesSchema, statsWidgetsSchema } from "../validate/stats.js";
+import { statsCommunitiesSchema, statsGraphSchema, statsWidgetsSchema } from "../validate/stats.js";
 import { Middleware } from "koa";
 const router = new Router({
    prefix: "/stats"
@@ -85,6 +85,72 @@ router.get("/widgets", authMiddlewarePassthrough, async ctx => {
    }
    const statsService = ctx.state.container.resolve(StatsService);
    const data = await statsService.widgets(value);
+   sendCached(ctx, data);
+});
+
+/**
+ * @openapi
+ * /api/stats/graph:
+ *    get:
+ *       tags:
+ *          - Stats
+ *       summary: Cached aggregates for charts
+ *       description: |
+ *          Accepts every query parameter of `GET /api/listings/search` except `listings`, which is
+ *          fixed to `false`. Returns the Repliers search envelope (`count`, `statistics`,
+ *          `aggregates`) with an empty `listings` array, cached per distinct set of parameters.
+ *       responses:
+ *          200:
+ *             description: Repliers search response without listings
+ *             headers:
+ *                Cache-Control:
+ *                   schema:
+ *                      type: string
+ *                   description: private, max-age set to the remaining server cache lifetime
+ *          400:
+ *             $ref: '#/components/responses/BadRequest'
+ *    post:
+ *       tags:
+ *          - Stats
+ *       summary: Cached aggregates for charts, with a body
+ *       description: Same as GET; the body takes `map`, `queries` and `imageSearchItems` as `POST /api/listings/search` does.
+ *       responses:
+ *          200:
+ *             description: Repliers search response without listings
+ *          400:
+ *             $ref: '#/components/responses/BadRequest'
+ */
+router.post("/graph", async ctx => {
+   ctx.state["enable.xff"] = true;
+   const {
+      error,
+      value
+   } = statsGraphSchema.validate({
+      ...ctx.request.query,
+      body: ctx.request.body
+   });
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const statsService = ctx.state.container.resolve(StatsService);
+   const data = await statsService.graph(value);
+   sendCached(ctx, data);
+});
+router.get("/graph", async ctx => {
+   ctx.state["enable.xff"] = true;
+   const {
+      error,
+      value
+   } = statsGraphSchema.validate({
+      ...ctx.request.query
+   });
+   if (error) {
+      ctx.throw(new ApiError(error.message, 400));
+      return;
+   }
+   const statsService = ctx.state.container.resolve(StatsService);
+   const data = await statsService.graph(value);
    sendCached(ctx, data);
 });
 /**

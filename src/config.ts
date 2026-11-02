@@ -103,6 +103,9 @@ export interface AppConfig {
       statswidget: {
          ttl_ms: number;
       };
+      statsgraph: {
+         ttl_ms: number;
+      };
 
       /**
        * @deprecated This method is deprecated in favor of the GET /locations.
@@ -184,6 +187,14 @@ export interface AppConfig {
    };
    ngrok: {
       authtoken: string;
+   };
+   // Remote copy of settings.restrictedListings, fetched on start. Empty url = off, empty tokenUrl = no auth.
+   restrictedListingsSource: {
+      url: string;
+      tokenUrl: string;
+      email: string;
+      password: string;
+      timeoutMs: number;
    };
    eventsCollection: {
       defaultEventFields: Partial<BossEventsCreateRequest>;
@@ -402,6 +413,9 @@ const config: AppConfig = {
       statswidget: {
          ttl_ms: parseInt(process.env["CACHE_STATSWIDGET_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
       },
+      statsgraph: {
+         ttl_ms: parseInt(process.env["CACHE_STATSGRAPH_TTL"] || "86400000") // 24 hours
+      },
       neighborhoodsranking: {
          ttl_ms: parseInt(process.env["CACHE_NEIGHBORHOODSRANKING_TTL"] || "86400000") // 24 * 60 * 60 * 1000 = 24 hours
       },
@@ -510,6 +524,13 @@ const config: AppConfig = {
    },
    ngrok: {
       authtoken: process.env["NGROK_AUTHTOKEN"] || ""
+   },
+   restrictedListingsSource: {
+      url: process.env["RESTRICTED_LISTINGS_SOURCE_URL"] || "",
+      tokenUrl: process.env["RESTRICTED_LISTINGS_SOURCE_TOKEN_URL"] || "",
+      email: process.env["RESTRICTED_LISTINGS_SOURCE_EMAIL"] || "",
+      password: process.env["RESTRICTED_LISTINGS_SOURCE_PASSWORD"] || "",
+      timeoutMs: parseInt(process.env["RESTRICTED_LISTINGS_SOURCE_TIMEOUT_MS"] || "30000")
    },
    eventsCollection: {
       defaultEventFields: {

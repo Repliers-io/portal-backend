@@ -3,6 +3,8 @@ import { RplClass } from "../types/repliers.js";
 import { rplClassSchema, rplMapFlexibleSchema } from "./common.js";
 import communities from "../services/stats/communities.js";
 import config from "../config.js";
+import _ from "lodash";
+import { listingBodySchema, listingSearchSchemaKeys, type RplListingsSearchDto } from "./listings.js";
 export const statsWidgetsSchema = joi.object<StatsWidgetsDto>().keys({
    map: rplMapFlexibleSchema,
    class: joi.alternatives(joi.array().items(joi.string().valid(...Object.values(RplClass)).required()).single(), joi.string().custom((value, helpers) => {
@@ -47,3 +49,14 @@ export const statsCommunitiesSchema = joi.object<StatsCommunitiesDto>().keys({
 export interface StatsCommunitiesDto {
    districtId?: number;
 }
+
+// A cached, aggregates-only twin of /listings/search: same filters, statistics and groupings,
+// `listings` pinned to false so the response never carries per-user data.
+export const statsGraphSchema = joi.object<StatsGraphDto>().keys({
+   ..._.omit(listingSearchSchemaKeys, "app_state", "listings"),
+   listings: joi.boolean().valid(false).default(false),
+   body: listingBodySchema
+}).pattern(/^raw\./, joi.alternatives().try(joi.string(), joi.array().items(joi.string()))).with("radius", ["long", "lat"]);
+export type StatsGraphDto = Omit<RplListingsSearchDto, "app_state" | "listings"> & {
+   listings: false;
+};

@@ -246,12 +246,19 @@ export default class RepliersListings extends RepliersBase {
       } = params;
       query.displayInternetEntireListing = RplYesNo.Y;
 
-      // `standardStatus` and `mlsNumber` filters both live at the top level and
-      // inside `body.queries[]`.
+      // Repliers rejects a parameter sent both at the top level and inside `body.queries[]`,
+      // so with a union the status lives in every branch only: a top-level request status
+      // carries into each branch that sets none, then each branch is constrained.
       const allowedStandardStatuses = this.config.settings.allowedListingsStandardStatuses;
-      constrainStandardStatus(query, allowedStandardStatuses);
-      for (const nestedQuery of body.queries ?? []) {
-         constrainStandardStatus(nestedQuery, allowedStandardStatuses);
+      const branches = body.queries ?? [];
+      if (branches.length) {
+         for (const branch of branches) {
+            if (query.standardStatus) branch.standardStatus ??= query.standardStatus;
+            constrainStandardStatus(branch, allowedStandardStatuses);
+         }
+         delete query.standardStatus;
+      } else {
+         constrainStandardStatus(query, allowedStandardStatuses);
       }
       const prefix = this.config.settings.mlsNumberPrefix;
       addMlsNumbers(query, prefix);
